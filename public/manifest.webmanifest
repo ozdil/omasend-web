@@ -1,0 +1,16 @@
+{
+  "name": "OmaSend Web",
+  "short_name": "OmaSend",
+  "description": "Zero-Knowledge AirBridge P2P and E2EE File Transfer Web Client",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#090d16",
+  "theme_color": "#0284c7",
+  "icons": [
+    {
+      "src": "favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ]
+}

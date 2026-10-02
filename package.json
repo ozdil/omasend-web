@@ -1,0 +1,18 @@
+{
+  "name": "omasend-web",
+  "version": "1.7.0",
+  "private": true,
+  "description": "Zero-Knowledge AirBridge P2P and E2EE File Transfer Web Client",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "vite": "^6.2.0",
+    "vite-plugin-pwa": "^0.21.1"
+  }
+}
