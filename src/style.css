@@ -177,20 +177,22 @@ body::before {
 }
 
 /* Main Container Layout */
-.app-main {
+.app-main,
+.dashboard-grid {
   flex: 1;
   max-width: 1200px;
   width: 100%;
   margin: 0 auto;
   padding: 1.5rem;
   display: grid;
-  grid-template-columns: 1fr 380px;
+  grid-template-columns: minmax(340px, 420px) 1fr;
   gap: 1.5rem;
   z-index: 1;
 }
 
 @media (max-width: 900px) {
-  .app-main {
+  .app-main,
+  .dashboard-grid {
     grid-template-columns: 1fr;
     padding: 1rem;
   }

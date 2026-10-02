@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ozdil/omasend-web/releases"><img src="https://img.shields.io/badge/S%C3%BCr%C3%BCm-v1.7.0-38BDF8?style=for-the-badge&logo=typescript" alt="Sürüm v1.7.0" /></a>
+  <a href="https://github.com/ozdil/omasend-web/releases"><img src="https://img.shields.io/badge/S%C3%BCr%C3%BCm-v1.7.1-38BDF8?style=for-the-badge&logo=typescript" alt="Sürüm v1.7.1" /></a>
   <a href="https://github.com/ozdil/omarchy-omasend"><img src="https://img.shields.io/badge/Omarchy%20Linux-Masa%C3%BCst%C3%BC%20Eklentisi-00ADD8?style=for-the-badge&logo=archlinux&logoColor=white" alt="Omarchy Linux Eklentisi" /></a>
   <a href="https://github.com/ozdil/omasend-android"><img src="https://img.shields.io/badge/Android-Uygulama-34A853?style=for-the-badge&logo=android&logoColor=white" alt="Android Uygulaması" /></a>
   <a href="https://buymeacoffee.com/ozdil"><img src="https://img.shields.io/badge/Kahve_Ismarla-Destek-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Kahve Ismarla" /></a>

@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ozdil/omasend-web/releases"><img src="https://img.shields.io/badge/Release-v1.7.0-38BDF8?style=for-the-badge&logo=typescript" alt="Release v1.7.0" /></a>
+  <a href="https://github.com/ozdil/omasend-web/releases"><img src="https://img.shields.io/badge/Release-v1.7.1-38BDF8?style=for-the-badge&logo=typescript" alt="Release v1.7.1" /></a>
   <a href="https://github.com/ozdil/omarchy-omasend"><img src="https://img.shields.io/badge/Omarchy%20Linux-Desktop%20Plugin-00ADD8?style=for-the-badge&logo=archlinux&logoColor=white" alt="Omarchy Linux Desktop Plugin" /></a>
   <a href="https://github.com/ozdil/omasend-android"><img src="https://img.shields.io/badge/Android-Companion%20App-34A853?style=for-the-badge&logo=android&logoColor=white" alt="Android Companion App" /></a>
   <a href="https://buymeacoffee.com/ozdil"><img src="https://img.shields.io/badge/Buy_Me_A_Coffee-Support-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me A Coffee" /></a>
