@@ -1,6 +1,6 @@
 {
   "name": "omasend-web",
-  "version": "1.7.1",
+  "version": "1.7.2",
   "private": true,
   "description": "Zero-Knowledge AirBridge P2P and E2EE File Transfer Web Client",
   "type": "module",
