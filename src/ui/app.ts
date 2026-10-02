@@ -1,7 +1,6 @@
 import { OmaIdValidator } from '../core/identity/omaid';
-import { StorageVault, PairedPeer, ClipboardItemRecord } from '../core/identity/storage';
+import { StorageVault, PairedPeer } from '../core/identity/storage';
 import { EngineClient, DiscoveredDevice, EngineStatus } from '../core/network/engine_client';
-import { ClipboardVault } from '../core/clipboard/clipboard_vault';
 
 interface ActiveTransfer {
   id: string;
@@ -17,7 +16,6 @@ interface ActiveTransfer {
 export class OmaSendApp {
   private vault: StorageVault;
   private engineClient: EngineClient;
-  private clipboardVault: ClipboardVault;
 
   private omaId: string = '';
   private engineStatus: EngineStatus | null = null;
@@ -31,7 +29,6 @@ export class OmaSendApp {
   constructor() {
     this.vault = new StorageVault();
     this.engineClient = new EngineClient();
-    this.clipboardVault = new ClipboardVault(this.vault);
   }
 
   public async init(): Promise<void> {
@@ -47,7 +44,6 @@ export class OmaSendApp {
     // 4. Initial telemetry & sync
     await this.refreshEngineStatus();
     await this.refreshPeers();
-    this.renderClipboardVault();
 
     // 5. Start background sync loop
     this.startBackgroundLoop();
@@ -186,29 +182,6 @@ export class OmaSendApp {
               </div>
             </div>
           </section>
-
-          <!-- Right Column: Clipboard Vault -->
-          <section class="card glass-card panel-clipboard">
-            <div class="card-header">
-              <div class="card-title">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
-                  <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
-                </svg>
-                Clipboard Vault
-              </div>
-              <button class="btn btn-ghost btn-sm" id="btn-paste-clipboard">+ Add Clip</button>
-            </div>
-
-            <div class="clipboard-input-bar">
-              <input type="text" id="quick-clip-input" class="input-text" placeholder="Type text or paste to sync across devices..." />
-              <button class="btn btn-primary btn-sm" id="btn-quick-clip-send">Sync</button>
-            </div>
-
-            <div class="clipboard-list" id="clipboard-list-container">
-              <div class="empty-state-sm">Clipboard vault is empty.</div>
-            </div>
-          </section>
         </main>
 
         <!-- Status Footer -->
@@ -298,39 +271,6 @@ export class OmaSendApp {
         }
       });
     }
-
-    // Clipboard input
-    const quickClipInput = document.getElementById('quick-clip-input') as HTMLInputElement;
-    const btnQuickClip = document.getElementById('btn-quick-clip-send');
-
-    if (btnQuickClip && quickClipInput) {
-      btnQuickClip.addEventListener('click', async () => {
-        const text = quickClipInput.value.trim();
-        if (!text) return;
-        await this.clipboardVault.pushText(text, 'Web Client');
-        quickClipInput.value = '';
-        this.renderClipboardVault();
-        this.showToast('Pushed text to Clipboard Vault');
-      });
-    }
-
-    // Global paste listener for images / text
-    window.addEventListener('paste', async (e: ClipboardEvent) => {
-      const items = e.clipboardData?.items;
-      if (!items) return;
-
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        if (item.type.startsWith('image/')) {
-          const file = item.getAsFile();
-          if (file) {
-            await this.clipboardVault.pushImage(file, 'Web Paste');
-            this.renderClipboardVault();
-            this.showToast('Image saved to Clipboard Vault');
-          }
-        }
-      }
-    });
   }
 
   private async refreshEngineStatus(): Promise<void> {
@@ -456,54 +396,6 @@ export class OmaSendApp {
       label.textContent = peer.name;
     }
     this.refreshPeers();
-  }
-
-  private renderClipboardVault(): void {
-    const items: ClipboardItemRecord[] = this.vault.getClipboardItems();
-    const container = document.getElementById('clipboard-list-container');
-    if (!container) return;
-
-    if (items.length === 0) {
-      container.innerHTML = '<div class="empty-state-sm">Clipboard vault is empty.</div>';
-      return;
-    }
-
-    let html = '';
-    items.forEach((item: ClipboardItemRecord) => {
-      const isImg = item.contentType.startsWith('image');
-      const contentDisplay = item.text || item.contentType;
-      html += `
-        <div class="clip-card" data-clip-id="${item.id}">
-          ${
-            isImg && item.thumbnailBase64
-              ? `<img src="${item.thumbnailBase64}" class="clip-thumb" alt="Pasted graphic" />`
-              : ''
-          }
-          <div class="clip-body">
-            <div class="clip-content">${this.escapeHtml(contentDisplay.length > 90 ? contentDisplay.slice(0, 90) + '...' : contentDisplay)}</div>
-            <div class="clip-meta">
-              <span>${item.sender}</span>
-              <span>•</span>
-              <span>${new Date(item.timestamp).toLocaleTimeString()}</span>
-            </div>
-          </div>
-          <button class="btn btn-ghost btn-sm btn-copy-clip" data-clip-id="${item.id}">Copy</button>
-        </div>
-      `;
-    });
-
-    container.innerHTML = html;
-
-    container.querySelectorAll('.btn-copy-clip').forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        const id = (e.currentTarget as HTMLElement).getAttribute('data-clip-id');
-        const item = items.find((x: ClipboardItemRecord) => x.id === id);
-        if (item && item.text) {
-          navigator.clipboard.writeText(item.text);
-          this.showToast('Copied item from vault to clipboard');
-        }
-      });
-    });
   }
 
   private async handleSelectedFiles(files: File[]): Promise<void> {
