@@ -1,4 +1,4 @@
-# OmaSend Web - PWA İstemcisi (önizleme)
+# OmaSend Web - PWA İstemcisi
 
 <p align="center">
   <img src="public/icon-512.png" alt="OmaSend Web Logosu" width="160" height="160" />
@@ -12,20 +12,34 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/Lisans-MIT-blue?style=for-the-badge" alt="MIT Lisansı" /></a>
 </p>
 
-> **Durum: önizleme.** Web istemcisi şu an yalnızca yapılandırılmış bir OmaSend motorunun durumunu ve o motorun bulduğu cihazları gösterir. **Tarayıcıdan dosya gönderme, pano eşitleme ve eşleştirme henüz yok.** Bunlar için OmaSend masaüstü panelini veya OmaSend Android uygulamasını kullanın.
+> Telefonundaki veya dizüstündeki tarayıcıyı bir QR kod tarayarak OmaSend masaüstünle eşleştir, sonra masaüstüne dosya ve pano metni gönder. Kurulum gerekmez. **Tarayıcıyla alma mümkün değil**: almak için OmaSend masaüstü panelini veya Android uygulamasını kullan.
 
 ---
 
-## Bugün yaptıkları
+## Nasıl çalışır
 
-- Modern tarayıcılara kurulabilen PWA.
-- Motordan `GET /api/status` ve `GET /api/p2p/peers` okur; yalnızca motorun gerçekten döndürdüğü değerleri gösterir.
-- Service worker: sayfa için önce ağ (güncellemeler ulaşır), yalnızca hash'li derleme dosyaları için önce önbellek, çevrimdışıyken son önbelleğe alınmış sayfa.
+OmaSend masaüstü motoru bu uygulamayı kendisi `http://<masaüstü-ip>:53317/web/` adresinde sunar. Uygulama yalnızca onu sunan motorla konuşur (aynı origin, `connect-src 'self'`).
 
-## Henüz yapmadıkları
+1. **Eşleştir.** Masaüstünde "Cihaz eşleştir"i seç. QR kod
+   `http://<ip>:53317/web/#pair=<omasend://pair?v=2&pk=…&s=…>` içerir. Telefonun kamerasıyla tara; sayfa açılır, bağlantıyı adres çubuğundan siler ve *"<masaüstü> ile eşleştirilsin mi (cihaz kimliği XXXX-XXXX-XXXX-XXXX)?"* diye sorar. Kimliğin masaüstündekiyle aynı olduğunu kontrol et. Bağlantıyı yapıştırabilir ya da tarayıcıda `BarcodeDetector` varsa sayfa içinde tarayabilirsin.
+2. **Dosya gönder.** Dosyaları bırak veya seç. Masaüstü kullanıcısından onay ister (bu tarayıcıyı kendi cihazı olarak tanımıyorsa); sayfa "onay bekleniyor" gösterir, sonra her dosyayı ilerlemesiyle yükler.
+3. **Metin gönder.** Metni yaz veya yapıştır ve masaüstü panosuna gönder.
 
-- Dosya aktarımı, pano eşitleme, QR ile eşleştirme ve cihaz eşleştirme yok.
-- Uçtan uca şifreleme iddiası yok. `src/core/crypto/web_crypto.ts` içindeki randevu yardımcıları anahtarı gizli olmayan OmaID'den türetir; bu yalnızca randevu kayıtlarını gizler (obfuscation).
+[OmaSend protokol v2](https://github.com/ozdil/omarchy-omasend/blob/main/PROTOCOL_V2.md) Aşama 1'i uygular:
+
+- Tarayıcının kendi Ed25519 cihaz anahtarı vardır (rastgele 32 baytlık tohum). Cihaz kimliği, SHA-256(açık anahtar)'ın ilk 8 baytıdır.
+- Eşleştirme: `POST /api/v2/pair`, iki açık anahtar üzerinde QR sırrıyla anahtarlanmış HMAC ve Ed25519 imzası ile. Masaüstünün yanıtı QR koddaki anahtardan gelmeli ve onunla imzalanmış olmalı; yoksa hiçbir şey kaydedilmez.
+- `/api/p2p/*` isteklerinin hepsi imzalanır (`X-OmaSend-Pk`, `-Ts`, `-Nonce`, `-Sig`): yöntem, gönderildiği haliyle yol ve sorgu, zaman damgası, nonce ve SHA-256 gövde etiketi (yüklemelerde `stream:<boyut>`).
+- Kriptografi saf JavaScript'tir ([@noble/curves](https://github.com/paulmillr/noble-curves), [@noble/hashes](https://github.com/paulmillr/noble-hashes); denetlenmiş, sürümü sabit), çünkü `http://192.168.x.y` üzerindeki bir sayfa güvenli bağlam değildir ve WebCrypto'su yoktur. Masaüstü ve Android ile aynı test vektörü `test/protocol.test.ts` içinde kontrol edilir.
+
+## Güvenlik ve gizlilik: bilmen gerekenler
+
+- **Aktarım şifreli değil.** Sayfa ve istekleri yerel ağda düz HTTP kullanır. İstekler doğrulanır (imzalanır), ama aynı ağdaki herkes gönderdiğin dosyaları ve metni okuyabilir. Güvendiğin ağlarda kullan.
+- **Cihaz anahtarı bu tarayıcı profilinde (IndexedDB) şifrelenmeden saklanır.** Tarayıcı profiline erişebilen biri onu kopyalayıp bu tarayıcı adına masaüstüne gönderim yapabilir. **Ayarlar → "Bu tarayıcıyı unut"** anahtarı, adı ve eşleşmeyi siler. Tarayıcıyı masaüstünün eşleşmiş cihazlarından da kaldır.
+- Eşleştirirken "Benim cihazım / Başkasının" seçimi yalnızca tarayıcıda bir etiket koyar. Masaüstü tarayıcıya ne kadar güveneceğine kendisi karar verir.
+- Motor gerektirdiği için aktarım isteklerinde rastgele 16 haneli bir OmaID de gönderilir; güven sağlamaz.
+- Analitik ve üçüncü taraf isteği yok. `index.html` içinde sıkı bir İçerik Güvenliği Politikası (CSP) var.
+- Service worker (çevrimdışı kabuk) yalnızca güvenli bağlamda (ör. `localhost`) kaydedilir; yerel ağdaki bir `http://` adresinde atlanır.
 
 ---
 
@@ -39,38 +53,20 @@
 
 ## Geliştirme ve Derleme
 
-### Ön Koşullar
-- Node.js 22 ve `npm`
+Ön koşullar: Node.js 22 ve `npm`.
 
-### Motor adresi
-
-İstemci motorun adresini tahmin etmez; derleme veya geliştirme sırasında açıkça verin:
-
-```bash
-VITE_OMASEND_ENGINE_URL=http://127.0.0.1:53317 npm run dev
-```
-
-Verilmezse, motorun kendisinin sunduğu bir üretim derlemesi kendi origin'ine bağlanır; `npm run dev` altında sayfa "Engine URL not configured" gösterir. Tarayıcılar `https://` bir sayfadan `http://` motorlara isteği (mixed content) engeller ve motorun CORS ile sayfanın origin'ine izin vermesi gerekir.
-
-### Yerel Geliştirme Sunucusu
 ```bash
 npm ci
-npm run dev
+npx tsc --noEmit     # tip kontrolü
+npx vitest run       # birim testleri (protokol test vektörleri, bağlantı ayrıştırma, kanonik metinler)
+npm run build        # dist/ altında statik çıktı; motor bunu /web/ altında sunar
 ```
 
-### Üretim Derlemesi
-```bash
-npm run build
-```
-Statik çıktı `dist/` dizinine yazılır (repoya eklenmez). Arayüzde görünen sürüm ve service worker önbellek adı `package.json` sürümünden gelir.
+`npm run build && npm run mock`, `e2e/mock-engine.mjs`'i başlatır: `dist/`'i `/web/` altında sunar, yukarıdaki uç noktaları uygular (her MAC, imza ve gövde etiketini doğrular) ve tarayıcıda açılacak bir eşleştirme bağlantısı yazdırır. `GET /__mock/state` gelenleri gösterir.
 
----
+`npm run dev`, `/api` isteklerini `http://127.0.0.1:53317`'ye yönlendirir (`OMASEND_ENGINE=http://…` ile değiştirilebilir).
 
-## Güvenlik ve Gizlilik
-
-- Tüm kriptografik yardımcılar tarayıcıda Web Crypto API ile çalışır; mevcut arayüz dosya veya pano içeriğini hiçbir yere göndermez.
-- Tarayıcının yerel kimliği ve saklanan veriler `localStorage` içinde düz metin olarak durur.
-- `index.html` içinde sıkı bir İçerik Güvenliği Politikası (CSP) vardır (satır içi betik yok, bağlantılar sayfanın origin'i ve yerel motorlarla sınırlı).
+Uygulama sürümü (arayüz ve service worker önbellek adı) `package.json`'dan gelir.
 
 ---
 

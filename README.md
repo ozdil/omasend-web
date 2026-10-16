@@ -1,4 +1,4 @@
-# OmaSend Web - PWA Client (preview)
+# OmaSend Web - PWA Client
 
 <p align="center">
   <img src="public/icon-512.png" alt="OmaSend Web Logo" width="160" height="160" />
@@ -12,20 +12,34 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="MIT License" /></a>
 </p>
 
-> **Status: preview.** The web client currently shows the status of a configured OmaSend engine and the devices that engine has discovered. **Sending files, clipboard sync and pairing are not available from the browser yet.** Use the OmaSend desktop panel or the OmaSend Android app for those.
+> Pair a phone or laptop browser with your OmaSend desktop by scanning a QR code, then send it files and clipboard text. Nothing to install. **Receiving is not possible from a browser**: to receive, use the OmaSend desktop panel or the Android app.
 
 ---
 
-## What it does today
+## How it works
 
-- Installable Progressive Web App (PWA) for modern browsers.
-- Reads `GET /api/status` and `GET /api/p2p/peers` from an OmaSend engine and shows only the values the engine actually returns.
-- Service worker: network-first for the page itself (so updates arrive), cache-first only for hashed build assets, offline fallback to the last cached page.
+The OmaSend desktop engine serves this app itself at `http://<desktop-lan-ip>:53317/web/`. The app only ever talks to the engine that served it (same origin, `connect-src 'self'`).
 
-## What it does not do (yet)
+1. **Pair.** On the desktop, choose "Pair a device". The QR code contains
+   `http://<ip>:53317/web/#pair=<omasend://pair?v=2&pk=…&s=…>`. Scan it with the phone's camera; the page opens, removes the link from the address bar and asks *"Pair with <desktop> (device id XXXX-XXXX-XXXX-XXXX)?"*. Check that the ID matches the desktop's screen. You can also paste the link, or scan in-page where the browser has `BarcodeDetector`.
+2. **Send files.** Drop or pick files. The desktop asks its user for approval (unless it trusts this browser as one of its own devices); the page shows "Waiting for approval", then uploads each file with progress.
+3. **Send text.** Type or paste text and send it to the desktop clipboard.
 
-- No file transfer, no clipboard sync, no QR pairing, no device pairing.
-- No end-to-end encryption claims. The rendezvous helpers in `src/core/crypto/web_crypto.ts` derive keys from OmaIDs, which are not secret, so they only obfuscate rendezvous records.
+It implements [OmaSend protocol v2](https://github.com/ozdil/omarchy-omasend/blob/main/PROTOCOL_V2.md), Phase 1:
+
+- The browser has its own Ed25519 device key (random 32-byte seed). Its device ID is the first 8 bytes of SHA-256(public key).
+- Pairing: `POST /api/v2/pair` with an HMAC over both public keys (keyed with the QR secret) and an Ed25519 signature. The desktop's answer must come from the key in the QR code and be signed by it, or nothing is stored.
+- Every request to `/api/p2p/*` is signed (`X-OmaSend-Pk`, `-Ts`, `-Nonce`, `-Sig`) over method, path and query exactly as sent, timestamp, nonce and a SHA-256 body tag (`stream:<size>` for uploads).
+- Crypto is pure JavaScript ([@noble/curves](https://github.com/paulmillr/noble-curves), [@noble/hashes](https://github.com/paulmillr/noble-hashes), audited, pinned), because a page on `http://192.168.x.y` is not a secure context and has no WebCrypto. The same test vector as the desktop and Android apps is checked in `test/protocol.test.ts`.
+
+## Security and privacy: what to know
+
+- **Not encrypted in transit.** The page and its requests use plain HTTP on your local network. Requests are authenticated (signed), but anyone on the same network can read the files and text you send. Use it on networks you trust.
+- **The device key is stored unencrypted** in this browser's profile (IndexedDB). Anyone who can access the browser profile can copy it and send to your desktop as this browser. **Settings → "Forget this browser"** deletes the key, name and pairing. Also remove the browser from the desktop's paired devices.
+- "This is my device / Someone else's" when pairing only sets a label in the browser. The desktop decides its own trust level for the browser.
+- The app still sends a random 16-digit OmaID with transfer requests, because the engine requires one; it carries no trust.
+- No analytics, no third-party requests. A strict Content Security Policy is set in `index.html`.
+- The service worker (offline shell) only registers in a secure context (e.g. `localhost`); on a LAN `http://` address it is skipped.
 
 ---
 
@@ -39,38 +53,20 @@
 
 ## Development and Build
 
-### Prerequisites
-- Node.js 22 and `npm`
+Prerequisites: Node.js 22 and `npm`.
 
-### Engine URL
-
-The client never guesses where the engine is. Set it explicitly at build or dev time:
-
-```bash
-VITE_OMASEND_ENGINE_URL=http://127.0.0.1:53317 npm run dev
-```
-
-Without it, a production build served by the engine itself talks to its own origin; under `npm run dev` the page shows "Engine URL not configured". Note that browsers block requests from an `https://` page to `http://` engines (mixed content) and the engine must allow the page's origin via CORS.
-
-### Local Development Server
 ```bash
 npm ci
-npm run dev
+npx tsc --noEmit     # type check
+npx vitest run       # unit tests (protocol test vectors, link parsing, canonical strings)
+npm run build        # static output in dist/, served by the engine under /web/
 ```
 
-### Production Build
-```bash
-npm run build
-```
-The static output is generated in `dist/` (not committed). The app version shown in the UI and the service worker cache name come from `package.json`.
+`npm run build && npm run mock` starts `e2e/mock-engine.mjs`: it serves `dist/` under `/web/`, implements the endpoints above (verifying every MAC, signature and body tag) and prints a pairing link to open in a browser. `GET /__mock/state` shows what it received.
 
----
+`npm run dev` proxies `/api` to `http://127.0.0.1:53317` (override with `OMASEND_ENGINE=http://…`).
 
-## Security & Privacy
-
-- All cryptographic helpers run in the browser via the Web Crypto API; the current UI does not transmit files or clipboard contents anywhere.
-- The browser's local ID and any stored data live in `localStorage` in plain text.
-- A strict Content Security Policy is set in `index.html` (no inline scripts, connections limited to the page origin and local engines).
+The app version (UI and service-worker cache name) comes from `package.json`.
 
 ---
 
