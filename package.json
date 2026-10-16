@@ -9,7 +9,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "mock": "node e2e/mock-engine.mjs"
   },
   "devDependencies": {
     "typescript": "^5.7.3",
