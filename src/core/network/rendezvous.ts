@@ -61,35 +61,60 @@ export class RendezvousClient {
   }
 
   /**
-   * Decrypts a fetched Blinded Rendezvous Record
+   * Decrypts a fetched Blinded Rendezvous Record.
+   *
+   * Mirrors decrypt_rendezvous_record in the desktop engine (rendezvous.rs):
+   * the envelope topic must equal the topic derived from the OmaID
+   * (constant-time compare) and the nonce must be 12 bytes. In addition the
+   * decrypted record's own topic must match and it must not be expired.
+   * Returns null on any mismatch.
    */
   static async decryptRecord(
     omaId: string,
-    nonceHex: string,
-    ciphertextHex: string
+    envelope: { topic: string; nonce: string; ciphertext: string },
+    nowSecs: number = Math.floor(Date.now() / 1000)
   ): Promise<RendezvousRecord | null> {
     try {
-      const fromHex = (hex: string) => {
-        const bytes = new Uint8Array(hex.length / 2);
-        for (let i = 0; i < bytes.length; i++) {
-          bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
-        }
-        return bytes;
-      };
+      const expectedTopic = await CryptoEngine.computeRendezvousTopic(omaId);
+      if (!constantTimeEqual(envelope.topic, expectedTopic)) return null;
 
-      const iv = fromHex(nonceHex);
-      const ciphertext = fromHex(ciphertextHex);
+      const iv = fromHex(envelope.nonce);
+      const ciphertext = fromHex(envelope.ciphertext);
+      if (!iv || iv.length !== 12 || !ciphertext) return null;
+
       const fullPayload = new Uint8Array(iv.length + ciphertext.length);
       fullPayload.set(iv, 0);
       fullPayload.set(ciphertext, iv.length);
 
       const decrypted = await CryptoEngine.decryptPayload(fullPayload, omaId);
-      const jsonStr = new TextDecoder().decode(decrypted);
-      return JSON.parse(jsonStr) as RendezvousRecord;
+      const record = JSON.parse(new TextDecoder().decode(decrypted)) as RendezvousRecord;
+
+      if (typeof record !== 'object' || record === null) return null;
+      if (!constantTimeEqual(String(record.topic), expectedTopic)) return null;
+      if (typeof record.expires_at !== 'number' || record.expires_at <= nowSecs) return null;
+      return record;
     } catch {
       return null;
     }
   }
+}
+
+function fromHex(hex: string): Uint8Array | null {
+  if (typeof hex !== 'string' || hex.length % 2 !== 0 || !/^[0-9a-fA-F]*$/.test(hex)) return null;
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
+  }
+  return bytes;
+}
+
+function constantTimeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
 }
 
 export const BlindedRendezvousClient = RendezvousClient;
