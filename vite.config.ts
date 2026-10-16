@@ -20,32 +20,19 @@ function serviceWorker(): Plugin {
 }
 
 /**
- * index.html carries the production CSP.
- * - build: if VITE_OMASEND_ENGINE_URL points outside the default local
- *   origins, add its origin to connect-src so the configured engine works.
- * - dev: drop the CSP meta, because the Vite dev server relies on inline
- *   style injection and an HMR websocket.
+ * index.html carries the production CSP (connect-src 'self': the app only talks to the engine
+ * that serves it, at http://<desktop>:53317/web/). Under the Vite dev server the CSP meta is
+ * dropped, because the dev server relies on inline style injection and an HMR websocket.
  */
 function contentSecurityPolicy(): Plugin {
-  let engineOrigin: string | null = null;
   let isDev = false;
   return {
     name: 'omasend-csp',
     configResolved(config) {
       isDev = config.command === 'serve' && !config.isProduction;
-      const raw = config.env.VITE_OMASEND_ENGINE_URL;
-      if (typeof raw === 'string' && raw.trim()) {
-        engineOrigin = new URL(raw.trim()).origin;
-      }
     },
     transformIndexHtml(html) {
-      if (isDev) {
-        return html.replace(/\s*<meta http-equiv="Content-Security-Policy"[^>]*>/, '');
-      }
-      if (engineOrigin && !/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(engineOrigin)) {
-        return html.replace(/connect-src 'self'/, `connect-src 'self' ${engineOrigin}`);
-      }
-      return html;
+      return isDev ? html.replace(/\s*<meta http-equiv="Content-Security-Policy"[^>]*>/, '') : html;
     },
   };
 }
@@ -59,6 +46,8 @@ export default defineConfig({
   server: {
     port: 3000,
     host: true,
+    // `npm run dev` talks to a local engine (or e2e/mock-engine.mjs) through the dev server.
+    proxy: { '/api': process.env.OMASEND_ENGINE ?? 'http://127.0.0.1:53317' },
   },
   build: {
     target: 'es2022',

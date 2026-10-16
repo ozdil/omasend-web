@@ -1,7 +1,7 @@
 {
   "name": "OmaSend Web",
   "short_name": "OmaSend",
-  "description": "OmaSend web client (preview): engine status and LAN discovery viewer",
+  "description": "Pair this browser with your OmaSend desktop and send it files and text",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

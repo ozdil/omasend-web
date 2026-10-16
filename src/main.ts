@@ -1,11 +1,11 @@
 import './style.css';
 import { OmaSendApp } from './ui/app';
 
-document.addEventListener('DOMContentLoaded', async () => {
-  const app = new OmaSendApp();
-  await app.init();
+document.addEventListener('DOMContentLoaded', () => {
+  void new OmaSendApp().init();
 
-  // The service worker is only built for production (see vite.config.ts).
+  // Service workers need a secure context. The engine usually serves this page over plain
+  // http on a LAN address, where registration is skipped silently; the app works without it.
   if (import.meta.env.PROD && 'serviceWorker' in navigator && window.isSecureContext) {
     navigator.serviceWorker
       .register('./sw.js', { updateViaCache: 'none' })

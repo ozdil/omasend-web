@@ -90,9 +90,9 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
-  // Never intercept cross-origin requests (e.g. a configured engine URL).
+  // Never intercept cross-origin requests.
   if (url.origin !== self.location.origin) return;
-  // Never intercept engine API / websocket paths when served by the engine.
+  // Never intercept engine API / websocket paths (the engine serves the app under /web/).
   if (url.pathname.includes('/api/') || url.pathname.startsWith('/ws')) return;
 
   if (request.mode === 'navigate') {
