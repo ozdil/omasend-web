@@ -5,10 +5,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   const app = new OmaSendApp();
   await app.init();
 
-  // Register service worker if available
-  if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-    navigator.serviceWorker.register('./sw.js').catch(() => {
-      // Offline fallback
-    });
+  // The service worker is only built for production (see vite.config.ts).
+  if (import.meta.env.PROD && 'serviceWorker' in navigator && window.isSecureContext) {
+    navigator.serviceWorker
+      .register('./sw.js', { updateViaCache: 'none' })
+      .then((reg) => reg.update())
+      .catch(() => {
+        // Service worker unavailable; the app still works online.
+      });
   }
 });

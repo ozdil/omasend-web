@@ -51,7 +51,7 @@ export class ClipboardVault {
       const hasUpper = /[A-Z]/.test(t);
       const hasLower = /[a-z]/.test(t);
       const hasDigit = /[0-9]/.test(t);
-      const hasSpecial = /[!@#$%^&*()-_=+[\]{}|;:,<>?]/.test(t);
+      const hasSpecial = /[!@#$%^&*()\-_=+[\]{}|;:,<>?]/.test(t);
       if (hasUpper && hasLower && hasDigit && hasSpecial) {
         return true;
       }

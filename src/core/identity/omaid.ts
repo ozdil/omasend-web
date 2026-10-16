@@ -64,16 +64,17 @@ export class OmaIdEngine {
    * Generates a random 16-digit OmaID with cryptographic entropy and valid Luhn checksum
    */
   static generate(): string {
-    const array = new Uint8Array(16);
-    crypto.getRandomValues(array);
+    // Rejection sampling (bytes >= 250 are discarded) keeps digits uniform.
+    // Keep drawing from the CSPRNG until 15 digits are collected; never fall back to Math.random().
     const digits: number[] = [];
-    for (let i = 0; i < array.length && digits.length < 15; i++) {
-      if (array[i] < 250) {
-        digits.push(array[i] % 10);
-      }
-    }
+    const array = new Uint8Array(16);
     while (digits.length < 15) {
-      digits.push(Math.floor(Math.random() * 10));
+      crypto.getRandomValues(array);
+      for (let i = 0; i < array.length && digits.length < 15; i++) {
+        if (array[i] < 250) {
+          digits.push(array[i] % 10);
+        }
+      }
     }
     const check = this.computeLuhnChecksum(digits);
     digits.push(check);
