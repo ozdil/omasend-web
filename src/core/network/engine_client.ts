@@ -37,7 +37,7 @@ export type EngineStatusResult =
   | { ok: false; reason: string };
 
 const NOT_CONFIGURED_REASON =
-  'Engine URL not configured (set VITE_OMASEND_ENGINE_URL at build time)';
+  'Engine URL not configured (set VITE_OMASEND_ENGINE_URL)';
 
 function resolveDefaultBaseUrl(): string | null {
   const configured = (import.meta.env.VITE_OMASEND_ENGINE_URL as string | undefined)?.trim();
