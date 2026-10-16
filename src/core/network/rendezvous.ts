@@ -2,7 +2,7 @@
  * OmaSend Blinded Rendezvous Engine (WAN Global Discovery)
  */
 
-import { CryptoEngine } from '../crypto/e2ee';
+import { CryptoEngine } from '../crypto/web_crypto';
 
 export interface RendezvousRecord {
   v: number;

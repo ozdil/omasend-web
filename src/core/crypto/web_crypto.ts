@@ -1,6 +1,10 @@
 /**
- * OmaSend Zero-Knowledge Web Crypto Engine
- * 100% byte-compatible with Linux Rust rendezvous.rs and Android OmaIdentity.kt
+ * OmaSend Web Crypto helpers (HMAC/HKDF/AES-GCM via crypto.subtle).
+ *
+ * Note: the rendezvous key and topic are derived only from an OmaID, and
+ * OmaIDs are not secret (they are shared to pair and appear in beacons).
+ * Anyone who knows an OmaID can derive the same key, so this is
+ * obfuscation of rendezvous records, not end-to-end encryption.
  */
 
 import { OmaIdEngine } from '../identity/omaid';
@@ -140,68 +144,6 @@ export class CryptoEngine {
   static async computeSha256Hex(data: Uint8Array | ArrayBuffer): Promise<string> {
     const hashBuf = await crypto.subtle.digest('SHA-256', data as unknown as BufferSource);
     return Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
-  }
-
-  /**
-   * Derives a pairwise session key between two OmaIDs using symmetric HKDF
-   * 100% byte-compatible with Linux rendezvous.rs and Android OmaIdentity.kt
-   */
-  static async deriveP2pSessionKey(localOmaId: string, remoteOmaId: string): Promise<CryptoKey> {
-    const normLocal = OmaIdEngine.normalize(localOmaId);
-    const normRemote = OmaIdEngine.normalize(remoteOmaId);
-    const [first, second] = normLocal <= normRemote ? [normLocal, normRemote] : [normRemote, normLocal];
-    const ikm = new TextEncoder().encode(first + second);
-    const salt = new TextEncoder().encode('omasend-p2p-noise-salt-v2');
-    const info = new TextEncoder().encode('omasend-p2p-chacha-aes-tunnel-v2');
-    const rawKey = await this.hkdfSha256(ikm, salt, info);
-
-    return await crypto.subtle.importKey(
-      'raw',
-      rawKey as unknown as BufferSource,
-      { name: 'AES-GCM' },
-      false,
-      ['encrypt', 'decrypt']
-    );
-  }
-
-  /**
-   * Encrypts plaintext bytes using pairwise P2P AES-256-GCM
-   */
-  static async encryptP2pPayload(plaintext: Uint8Array, localOmaId: string, remoteOmaId: string): Promise<Uint8Array> {
-    const key = await this.deriveP2pSessionKey(localOmaId, remoteOmaId);
-    const iv = new Uint8Array(12);
-    crypto.getRandomValues(iv);
-
-    const encryptedBuffer = await crypto.subtle.encrypt(
-      { name: 'AES-GCM', iv: iv as unknown as BufferSource, tagLength: 128 },
-      key,
-      plaintext as unknown as BufferSource
-    );
-
-    const ciphertext = new Uint8Array(encryptedBuffer);
-    const output = new Uint8Array(12 + ciphertext.length);
-    output.set(iv, 0);
-    output.set(ciphertext, 12);
-    return output;
-  }
-
-  /**
-   * Decrypts ciphertext bytes using pairwise P2P AES-256-GCM
-   */
-  static async decryptP2pPayload(ciphertextWithIv: Uint8Array, localOmaId: string, remoteOmaId: string): Promise<Uint8Array> {
-    if (ciphertextWithIv.length < 28) {
-      throw new Error('P2P ciphertext payload too short');
-    }
-    const key = await this.deriveP2pSessionKey(localOmaId, remoteOmaId);
-    const iv = ciphertextWithIv.slice(0, 12);
-    const ciphertext = ciphertextWithIv.slice(12);
-
-    const decryptedBuffer = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: iv as unknown as BufferSource, tagLength: 128 },
-      key,
-      ciphertext as unknown as BufferSource
-    );
-    return new Uint8Array(decryptedBuffer);
   }
 
   /**

@@ -1,39 +1,31 @@
-# OmaSend Web - Sıfır Bilgili E2EE PWA Web İstemcisi
+# OmaSend Web - PWA İstemcisi (önizleme)
 
 <p align="center">
-  <img src="public/icons/icon-512x512.png" alt="OmaSend Web Logosu" width="160" height="160" />
+  <img src="public/icon-512.png" alt="OmaSend Web Logosu" width="160" height="160" />
 </p>
 
 <p align="center">
-  <a href="https://github.com/ozdil/omasend-web/releases"><img src="https://img.shields.io/badge/S%C3%BCr%C3%BCm-v1.7.1-38BDF8?style=for-the-badge&logo=typescript" alt="Sürüm v1.7.1" /></a>
+  <a href="https://github.com/ozdil/omasend-web/releases"><img src="https://img.shields.io/github/v/release/ozdil/omasend-web?style=for-the-badge&logo=typescript&color=38BDF8&label=S%C3%BCr%C3%BCm" alt="Son sürüm" /></a>
   <a href="https://github.com/ozdil/omarchy-omasend"><img src="https://img.shields.io/badge/Omarchy%20Linux-Masa%C3%BCst%C3%BC%20Eklentisi-00ADD8?style=for-the-badge&logo=archlinux&logoColor=white" alt="Omarchy Linux Eklentisi" /></a>
   <a href="https://github.com/ozdil/omasend-android"><img src="https://img.shields.io/badge/Android-Uygulama-34A853?style=for-the-badge&logo=android&logoColor=white" alt="Android Uygulaması" /></a>
   <a href="https://buymeacoffee.com/ozdil"><img src="https://img.shields.io/badge/Kahve_Ismarla-Destek-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Kahve Ismarla" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/Lisans-MIT-blue?style=for-the-badge" alt="MIT Lisansı" /></a>
 </p>
 
-> **Tüm modern tarayıcılarda kurulum gerektirmeyen, istemci taraflı Web Crypto AES-256-GCM şifrelemeli egemen dosya aktarımı, şifreli pano kasası ve 16 haneli Luhn OmaID eşleşmesi sunan PWA web istemcisi.**
+> **Durum: önizleme.** Web istemcisi şu an yalnızca yapılandırılmış bir OmaSend motorunun durumunu ve o motorun bulduğu cihazları gösterir. **Tarayıcıdan dosya gönderme, pano eşitleme ve eşleştirme henüz yok.** Bunlar için OmaSend masaüstü panelini veya OmaSend Android uygulamasını kullanın.
 
 ---
 
-## Öne Çıkan Özellikler
+## Bugün yaptıkları
 
-- **Sıfır Kurulum ve Evrensel Erişim:**
-  - Linux, Windows, macOS, iOS ve Android üzerindeki modern web tarayıcılarında (Chrome, Firefox, Safari, Edge) doğrudan çalışan Kademeli Web Uygulaması (PWA).
-  - Anında yükleme için çevrimdışı öncelikli Service Worker mimarisi.
-- **İstemci Taraflı Web Crypto API Mimarisi:**
-  - Donanım hızlandırmalı istemci taraflı AES-256-GCM şifreleme ve çözme (`crypto.subtle`).
-  - RFC 2104 HMAC-SHA256 Kör Randevu (Blinded Rendezvous) konuları ve RFC 5869 HKDF-SHA256 simetrik anahtar türetimi.
-  - Oturum anahtarları yalnızca URL'nin karma (`#key=...`) bölümünde tutulur; HTTP başlıklarına veya sunucu kayıtlarına kesinlikle ulaşmaz.
-- **16 Haneli Luhn Mod 10 OmaID Eşleşmesi:**
-  - Sıfır hesap, sıfır sunucu: 16 haneli cihaz kimliklerini (`XXXX-XXXX-XXXX-XXXX`) üretir ve doğrular.
-  - Omarchy Linux masaüstü ve OmaSend Android mobil istemcileriyle tam uyumlu eşleşir.
-- **Sürükle-Bırak Sıvı Dosya Portalı:**
-  - Gerçek zamanlı aktarım ilerlemesi, aktarım hızı göstergesi ve SHA-256 bütünlük doğrulaması ile parçalı akış (chunked stream) dosya yükleme ve indirme.
-- **Canlı Pano Kasası:**
-  - Tarayıcı ve yerel cihazlar arasında tek tıklamayla metin ve WebP formatında görsel pano aktarımı.
-- **Koyu Akrilik Glassmorphism Arayüzü:**
-  - Akıcı koyu cam arayüz tasarımı (`backdrop-filter: blur(16px)`), speküler kenarlıklar ve `JetBrainsMono Nerd Font` tipografisi.
+- Modern tarayıcılara kurulabilen PWA.
+- Motordan `GET /api/status` ve `GET /api/p2p/peers` okur; yalnızca motorun gerçekten döndürdüğü değerleri gösterir.
+- Service worker: sayfa için önce ağ (güncellemeler ulaşır), yalnızca hash'li derleme dosyaları için önce önbellek, çevrimdışıyken son önbelleğe alınmış sayfa.
+
+## Henüz yapmadıkları
+
+- Dosya aktarımı, pano eşitleme, QR ile eşleştirme ve cihaz eşleştirme yok.
+- Uçtan uca şifreleme iddiası yok. `src/core/crypto/web_crypto.ts` içindeki randevu yardımcıları anahtarı gizli olmayan OmaID'den türetir; bu yalnızca randevu kayıtlarını gizler (obfuscation).
 
 ---
 
@@ -48,25 +40,37 @@
 ## Geliştirme ve Derleme
 
 ### Ön Koşullar
-- Node.js 18+ ve `npm`
+- Node.js 22 ve `npm`
+
+### Motor adresi
+
+İstemci motorun adresini tahmin etmez; derleme veya geliştirme sırasında açıkça verin:
+
+```bash
+VITE_OMASEND_ENGINE_URL=http://127.0.0.1:53317 npm run dev
+```
+
+Verilmezse, motorun kendisinin sunduğu bir üretim derlemesi kendi origin'ine bağlanır; `npm run dev` altında sayfa "Engine URL not configured" gösterir. Tarayıcılar `https://` bir sayfadan `http://` motorlara isteği (mixed content) engeller ve motorun CORS ile sayfanın origin'ine izin vermesi gerekir.
 
 ### Yerel Geliştirme Sunucusu
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
-### Canlı Üretim Derlemesi
+### Üretim Derlemesi
 ```bash
 npm run build
 ```
-Optimize edilmiş statik dağıtım dosyaları `dist/` dizinine çıkarılır; herhangi bir statik web sunucusu tarafından sunulabilir veya `omasend-engine` ikilisine gömülebilir.
+Statik çıktı `dist/` dizinine yazılır (repoya eklenmez). Arayüzde görünen sürüm ve service worker önbellek adı `package.json` sürümünden gelir.
 
 ---
 
-## Güvenlik ve Gizlilik Politikası
+## Güvenlik ve Gizlilik
 
-OmaSend Web katı bir **Sıfır Bilgi (Zero-Knowledge) ve İstemci Taraflı Şifreleme** mimarisiyle çalışır. Tüm kriptografik işlemler Web Crypto API ile kullanıcının tarayıcı sandbox'ı içinde gerçekleştirilir. Şifrelenmemiş dosyalar, pano verileri veya gizli anahtarlar asla merkezi bir sunucuya iletilmez.
+- Tüm kriptografik yardımcılar tarayıcıda Web Crypto API ile çalışır; mevcut arayüz dosya veya pano içeriğini hiçbir yere göndermez.
+- Tarayıcının yerel kimliği ve saklanan veriler `localStorage` içinde düz metin olarak durur.
+- `index.html` içinde sıkı bir İçerik Güvenliği Politikası (CSP) vardır (satır içi betik yok, bağlantılar sayfanın origin'i ve yerel motorlarla sınırlı).
 
 ---
 
