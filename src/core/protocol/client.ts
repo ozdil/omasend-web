@@ -59,11 +59,22 @@ export function uploadPath(token: string, filename: string): string {
   return `/api/p2p/upload?token=${encodeURIComponent(token)}&filename=${encodeURIComponent(filename)}`;
 }
 
+/**
+ * The request target as the browser will put it on the wire. The WHATWG URL parser may
+ * re-encode some characters in a query (e.g. ' becomes %27), so the signature covers
+ * `pathname + search` of the parsed URL, and the same parsed URL is what gets fetched.
+ */
+export function wireTarget(path: string, origin: string = location.origin): { href: string; pathAndQuery: string } {
+  const u = new URL(path, origin);
+  return { href: u.href, pathAndQuery: u.pathname + u.search };
+}
+
 async function signedJson(key: DeviceKey, method: 'GET' | 'POST', path: string, body?: unknown, signal?: AbortSignal) {
   const bytes = body === undefined ? new Uint8Array(0) : utf8(JSON.stringify(body));
-  const headers: Record<string, string> = { ...signedHeaders(key, method, path, bodyTagJson(bytes)) };
+  const target = wireTarget(path);
+  const headers: Record<string, string> = { ...signedHeaders(key, method, target.pathAndQuery, bodyTagJson(bytes)) };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
-  const resp = await fetch(path, {
+  const resp = await fetch(target.href, {
     method,
     headers,
     body: body === undefined ? undefined : bytes,
@@ -123,6 +134,7 @@ export async function pair(key: DeviceKey, offer: PairOffer, myName: string): Pr
 }
 
 export interface TransferRequestBody {
+  /** Not needed by engines that accept signed requests without an OmaID; kept for older engines. */
   oma_id: string;
   sender_name: string;
   files: { name: string; size_bytes: number }[];
@@ -162,11 +174,11 @@ export function uploadFile(
   onProgress: (sent: number, total: number) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const path = uploadPath(token, filename);
-  const headers = signedHeaders(key, 'POST', path, bodyTagStream(file.size));
+  const target = wireTarget(uploadPath(token, filename));
+  const headers = signedHeaders(key, 'POST', target.pathAndQuery, bodyTagStream(file.size));
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', path);
+    xhr.open('POST', target.href);
     for (const [k, v] of Object.entries(headers)) xhr.setRequestHeader(k, v);
     xhr.setRequestHeader('Content-Type', 'application/octet-stream');
     xhr.upload.onprogress = (ev) => onProgress(ev.loaded, ev.lengthComputable ? ev.total : file.size);

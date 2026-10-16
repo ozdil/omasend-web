@@ -14,7 +14,7 @@ import {
 import { b64urlDecode, b64urlEncode, utf8 } from '../src/core/protocol/encoding';
 import { fragmentHasPair, pairLinkFromFragment, pairLinkFromText, parsePairUri, urlDecode } from '../src/core/protocol/pairuri';
 import { sanitizeFilename } from '../src/core/protocol/filename';
-import { buildPairRequest, decisionPath, uploadPath, verifyPairResponse } from '../src/core/protocol/client';
+import { buildPairRequest, decisionPath, uploadPath, verifyPairResponse, wireTarget } from '../src/core/protocol/client';
 
 const fill = (n: number, b: number) => new Uint8Array(n).fill(b);
 
@@ -96,8 +96,13 @@ describe('signed upload URL', () => {
     // The engine decodes filename= byte-wise (urlencoding_decode) and gets the name back.
     expect(urlDecode(path.split('filename=')[1])).toBe(name);
     // A WHATWG URL parser leaves this request target unchanged (what fetch/XHR put on the wire).
-    const u = new URL(path, 'http://192.168.1.10:53317/web/');
-    expect(u.pathname + u.search).toBe(path);
+    const w = wireTarget(path, 'http://192.168.1.10:53317');
+    expect(w.pathAndQuery).toBe(path);
+    expect(w.href).toBe('http://192.168.1.10:53317' + path);
+    // A character the URL parser re-encodes is signed in its on-the-wire form.
+    expect(wireTarget("/api/p2p/upload?token=a&filename=it's", 'http://h').pathAndQuery).toBe(
+      '/api/p2p/upload?token=a&filename=it%27s',
+    );
 
     const h = signedHeaders(key, 'POST', path, bodyTagStream(12345), 1760000000, '00112233445566778899aabbccddeeff');
     const canon =
