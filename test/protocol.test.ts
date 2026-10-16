@@ -12,7 +12,7 @@ import {
   verifyB64,
 } from '../src/core/protocol/devicekey';
 import { b64urlDecode, b64urlEncode, utf8 } from '../src/core/protocol/encoding';
-import { fragmentHasPair, pairLinkFromFragment, parsePairUri, urlDecode } from '../src/core/protocol/pairuri';
+import { fragmentHasPair, pairLinkFromFragment, pairLinkFromText, parsePairUri, urlDecode } from '../src/core/protocol/pairuri';
 import { sanitizeFilename } from '../src/core/protocol/filename';
 import { buildPairRequest, decisionPath, uploadPath, verifyPairResponse } from '../src/core/protocol/client';
 
@@ -82,7 +82,9 @@ describe('signed upload URL', () => {
     expect(sanitizeFilename(name)).toBe(name);
     expect(sanitizeFilename('../../etc/passwd')).toBe('file_1');
     expect(sanitizeFilename('🙂🙂', 2)).toBe('file_3');
-    expect(sanitizeFilename('.hidden')).toBe('file_1');
+    expect(sanitizeFilename('🙂.png', 0)).toBe('file_1.png');
+    expect(sanitizeFilename(sanitizeFilename('🙂.png'))).toBe('file_1.png');
+    expect(sanitizeFilename('.hidden')).toBe('file_1.hidden');
   });
 
   it('builds the canonical string from exactly the URL that is sent', () => {
@@ -172,6 +174,13 @@ describe('pair URI parsing', () => {
     expect(pairLinkFromFragment('#pair=%E0%A4%A')).toBeNull();
     expect(fragmentHasPair('#pair=%E0%A4%A')).toBe(true);
     expect(pairLinkFromFragment('#pair=')).toBeNull();
+  });
+
+  it('accepts a pasted omasend:// or http #pair= link', () => {
+    expect(pairLinkFromText('  ' + valid + '\n')).toBe(valid);
+    expect(pairLinkFromText('http://192.168.1.10:53317/web/#pair=' + encodeURIComponent(valid))).toBe(valid);
+    expect(pairLinkFromText('http://192.168.1.10:53317/web/')).toBeNull();
+    expect(pairLinkFromText('hello')).toBeNull();
   });
 });
 

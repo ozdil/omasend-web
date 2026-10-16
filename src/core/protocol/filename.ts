@@ -12,7 +12,10 @@ export function sanitizeFilename(raw: string, fallbackIndex = 0): string {
     .join('');
   const trimmed = cleaned.trim();
   if (trimmed === '' || trimmed.startsWith('.') || trimmed.includes('..')) {
-    return `file_${fallbackIndex + 1}`;
+    // Keep a plain extension (e.g. "🙂.png" -> "file_1.png"); the result is stable under the
+    // engine's sanitizer.
+    const ext = /\.[\p{Alphabetic}\p{N}]{1,10}$/u.exec(raw)?.[0] ?? '';
+    return `file_${fallbackIndex + 1}${ext}`;
   }
   return Array.from(trimmed).slice(0, 180).join('').trimEnd();
 }

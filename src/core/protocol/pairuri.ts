@@ -124,3 +124,15 @@ export function fragmentHasPair(hash: string): boolean {
   const frag = hash.startsWith('#') ? hash.slice(1) : hash;
   return frag.split('&').some((p) => p.startsWith('pair='));
 }
+
+/**
+ * Accepts what a user may paste or a QR code may contain: the omasend://pair link itself, or
+ * the http(s)://<desktop>/web/#pair=<…> link that wraps it. Returns the omasend:// link or null.
+ */
+export function pairLinkFromText(text: string): string | null {
+  const t = text.trim();
+  if (t.startsWith('omasend://')) return t;
+  const hashAt = t.indexOf('#');
+  if (/^https?:\/\//i.test(t) && hashAt >= 0) return pairLinkFromFragment(t.slice(hashAt));
+  return null;
+}
