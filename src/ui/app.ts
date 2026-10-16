@@ -274,24 +274,27 @@ export class OmaSendApp {
   }
 
   private async refreshEngineStatus(): Promise<void> {
-    try {
-      this.engineStatus = await this.engineClient.getStatus();
-      const statusEl = document.getElementById('engine-status-indicator');
-      const footerEl = document.getElementById('footer-connection-text');
-      if (statusEl && this.engineStatus) {
+    const result = await this.engineClient.getStatus();
+    this.engineStatus = result.ok ? result.status : null;
+    const statusEl = document.getElementById('engine-status-indicator');
+    const footerEl = document.getElementById('footer-connection-text');
+    if (result.ok) {
+      const st = result.status;
+      if (statusEl) {
         statusEl.className = 'engine-badge engine-online';
-        statusEl.textContent = `ENGINE DAEMON v${this.engineStatus.version || '1.7.0'}`;
-        if (footerEl) {
-          footerEl.textContent = `Local Port ${this.engineStatus.port} • ${this.engineStatus.device_name || 'Linux'}`;
-        }
+        statusEl.textContent = st.version ? `ENGINE CONNECTED v${st.version}` : 'ENGINE CONNECTED';
       }
-    } catch {
-      // Standalone web mode
-      const statusEl = document.getElementById('engine-status-indicator');
+      if (footerEl) {
+        const parts = [`Port ${st.port ?? 'unknown'}`];
+        if (st.device_name) parts.push(st.device_name);
+        footerEl.textContent = parts.join(' • ');
+      }
+    } else {
       if (statusEl) {
         statusEl.className = 'engine-badge';
-        statusEl.textContent = 'STANDALONE WEB CLIENT';
+        statusEl.textContent = 'ENGINE NOT CONNECTED';
       }
+      if (footerEl) footerEl.textContent = result.reason;
     }
   }
 
