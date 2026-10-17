@@ -76,6 +76,10 @@ const en = {
   settingsStorageNote:
     "The device key is stored unencrypted in this browser's profile (IndexedDB). Anyone with access to this browser profile can use it to send to your desktop. \"Forget this browser\" deletes it.",
   settingsVersion: 'Version',
+  settingsAbout: 'About',
+  settingsAboutBody:
+    'OmaSend Web sends files and text from this browser to your OmaSend desktop on the same network. Pairing uses the QR code and a per-browser Ed25519 key, and every request is signed. A browser can only send; to receive, or to use OmaID and end-to-end encryption, use the desktop panel or the Android app. MIT licensed.',
+  settingsSource: 'Source code',
 
   storageUnavailable: 'This browser does not allow the page to store data (IndexedDB), so it cannot keep a device key. Private windows often block this.',
   insecureNote: 'Connection to the desktop is not encrypted (plain http on your local network). Requests are signed, but others on the network can read what you send.',
@@ -184,6 +188,10 @@ const tr: Strings = {
   settingsStorageNote:
     'Cihaz anahtarı bu tarayıcı profilinde (IndexedDB) şifrelenmeden saklanır. Bu profile erişimi olan herkes onunla masaüstüne gönderim yapabilir. "Bu tarayıcıyı unut" anahtarı siler.',
   settingsVersion: 'Sürüm',
+  settingsAbout: 'Hakkında',
+  settingsAboutBody:
+    'OmaSend Web, bu tarayıcıdan aynı ağdaki OmaSend masaüstünüze dosya ve metin gönderir. Eşleşme QR kod ve tarayıcıya özel bir Ed25519 anahtarıyla yapılır, her istek imzalanır. Tarayıcı yalnızca gönderebilir; almak, OmaID ve uçtan uca şifreleme için masaüstü panelini ya da Android uygulamasını kullanın. MIT lisanslı.',
+  settingsSource: 'Kaynak kodu',
 
   storageUnavailable: 'Bu tarayıcı sayfanın veri saklamasına (IndexedDB) izin vermiyor, bu yüzden cihaz anahtarı tutulamıyor. Gizli pencereler bunu sıklıkla engeller.',
   insecureNote: 'Masaüstüyle bağlantı şifreli değil (yerel ağda düz http). İstekler imzalanır, ama ağdaki başkaları gönderdiklerini okuyabilir.',

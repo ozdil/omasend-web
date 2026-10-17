@@ -16,6 +16,17 @@
 
 ---
 
+## What's new in 2.0.9
+
+The web client now carries the same version number as the desktop plugin and the Android app (2.0.9; it was 1.8.0).
+
+- **Protocol v2 client:** pairs by scanning the desktop's QR code (per-browser Ed25519 key, signed requests) and sends files and clipboard text. Served by the desktop engine at `/web/`, so there is nothing to install.
+- **One ink:** a monochrome interface that follows the device's light or dark theme, with keyboard-friendly dialogs and WCAG AA contrast.
+- **About in Settings:** what the web client can and cannot do, its version and a link to the source.
+- **Fix:** requests are signed over the request target exactly as the browser sends it, so a character the browser re-encodes (such as an apostrophe in a file name) no longer fails the signature check.
+
+---
+
 ## How it works
 
 The OmaSend desktop engine serves this app itself at `http://<desktop-lan-ip>:53317/web/`. The app only ever talks to the engine that served it (same origin, `connect-src 'self'`).

@@ -601,7 +601,18 @@ export class OmaSendApp {
       el('div', { class: 'settings-block' }, row(this.t.settingsDeviceId, this.key.deviceId)),
       pairingBlock,
       el('div', { class: 'settings-block' }, el('p', { class: 'muted small' }, this.t.settingsStorageNote), forgetBrowserBtn),
-      el('div', { class: 'settings-block' }, row(this.t.settingsVersion, __APP_VERSION__)),
+      el(
+        'div',
+        { class: 'settings-block' },
+        el('h3', {}, this.t.settingsAbout),
+        el('p', { class: 'muted small' }, this.t.settingsAboutBody),
+        row(this.t.settingsVersion, __APP_VERSION__),
+        el(
+          'a',
+          { class: 'link', href: 'https://github.com/ozdil/omasend-web', target: '_blank', rel: 'noopener noreferrer' },
+          this.t.settingsSource,
+        ),
+      ),
       el('div', { class: 'actions' }, closeBtn),
     );
     modal.replaceChildren(el('div', { class: 'modal-backdrop' }, card));
