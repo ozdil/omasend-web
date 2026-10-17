@@ -199,8 +199,11 @@ describe('pairing request and response', () => {
     const mac = pairMac(secret, responder.pkB64, browser.pkB64);
     expect(req).toEqual({ pk: browser.pkB64, name: 'Browser on Linux', mac, sig: req.sig, client: 'web' });
     expect(mac).toMatch(/^[0-9a-f]{64}$/);
-    const transcript = utf8(pairTranscript(responder.pkB64, browser.pkB64, mac));
+    const transcript = utf8(pairTranscript(responder.pkB64, browser.pkB64, mac, 'web'));
+    expect(transcript).toEqual(utf8(`omasend-pair-v2|${responder.pkB64}|${browser.pkB64}|${mac}|web`));
     expect(verifyB64(decodePk(browser.pkB64)!, transcript, req.sig)).toBe(true);
+    // The signature does not verify over the native transcript: the client kind cannot be stripped.
+    expect(verifyB64(decodePk(browser.pkB64)!, utf8(pairTranscript(responder.pkB64, browser.pkB64, mac)), req.sig)).toBe(false);
 
     const resp = { pk: responder.pkB64, name: 'desk-host', device_id: responder.deviceId, sig: signB64(responder, transcript), quic_port: 53318 };
     expect(verifyPairResponse(browser, offer, resp)).toEqual({ pk: responder.pkB64, name: 'desk-host', deviceId: 'FE81-2C12-F3AB-4CE6' });
@@ -208,7 +211,7 @@ describe('pairing request and response', () => {
 
   it('takes the encryption key from the pair response only when the desktop signed it', () => {
     const mac = pairMac(secret, responder.pkB64, browser.pkB64);
-    const transcript = utf8(pairTranscript(responder.pkB64, browser.pkB64, mac));
+    const transcript = utf8(pairTranscript(responder.pkB64, browser.pkB64, mac, 'web'));
     const x25519 = 'i4jc1T3UEWi-5t2YzAAjCBEvhgfStTFDplY870idOh4';
     const good = { v: 1, x25519, sig: 'oF7kdBK8YQt5QQVY6UupXgnzKHgZKR9t6EcfdA0o1If1aqLP87bB4tsUBQmtJQFRJKN7r9jBcCFrNaqnR9j4Cg' };
     const base = { pk: responder.pkB64, name: 'desk-host', sig: signB64(responder, transcript) };
@@ -222,7 +225,7 @@ describe('pairing request and response', () => {
 
   it('rejects a response from another key or with a bad signature', () => {
     const mac = pairMac(secret, responder.pkB64, browser.pkB64);
-    const transcript = utf8(pairTranscript(responder.pkB64, browser.pkB64, mac));
+    const transcript = utf8(pairTranscript(responder.pkB64, browser.pkB64, mac, 'web'));
     const other = deviceKeyFromSeed(fill(32, 0x02));
     expect(() => verifyPairResponse(browser, offer, { pk: other.pkB64, sig: signB64(other, transcript) })).toThrow('pair_key_mismatch');
     expect(() => verifyPairResponse(browser, offer, { pk: responder.pkB64, sig: signB64(other, transcript) })).toThrow('pair_bad_signature');

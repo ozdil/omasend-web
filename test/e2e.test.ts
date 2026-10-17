@@ -12,7 +12,9 @@ import {
   encryptFileStream,
   fileLabel,
   newMessageKey,
+  PAD_TO,
   sealFile,
+  sealJson,
   sealMessage,
   subkey,
   verifyAdvert,
@@ -62,6 +64,18 @@ describe('webe2e test vector', () => {
     expect(clip).toEqual({ v: 1, epk: mk.epk, ct: 'F1-YlDras6142gWgkZ74xfy9p8cS' });
     expect(toHex(sealFile(mk, 0, new Uint8Array(0)))).toBe('d1c15f58b133dc819d93998d773bffed');
     expect(toHex(sealFile(mk, 1, utf8('abc')))).toBe('f64a652799246345385f30fcbf232b0a319739');
+  });
+
+  it('pads JSON messages to 256-byte steps and keeps them parseable', () => {
+    const mk = newMessageKey(DESKTOP_X25519, desktop.pkB64, fill(32, 0x09));
+    const fk = subkey(mk.key, LABEL_CLIPBOARD);
+    const open = (ct: string) => chacha20poly1305(fk, new Uint8Array(12), utf8(LABEL_CLIPBOARD)).decrypt(b64urlDecode(ct)!);
+    const short = open(sealJson(mk, LABEL_CLIPBOARD, { text: '123456' }).ct);
+    const long = open(sealJson(mk, LABEL_CLIPBOARD, { text: 'x'.repeat(200) }).ct);
+    expect(short.length).toBe(PAD_TO);
+    expect(long.length).toBe(PAD_TO);
+    expect(JSON.parse(new TextDecoder().decode(short))).toEqual({ text: '123456' });
+    expect(open(sealJson(mk, LABEL_CLIPBOARD, { text: 'x'.repeat(300) }).ct).length).toBe(2 * PAD_TO);
   });
 
   it('refuses a low-order desktop key', () => {

@@ -112,6 +112,22 @@ export function sealMessage(mk: MessageKey, label: string, plaintext: Uint8Array
   return { v: E2E_VERSION, epk: mk.epk, ct: b64urlEncode(ct) };
 }
 
+/** One-shot messages are padded to this many bytes, so a listener learns lengths only in steps. */
+export const PAD_TO = 256;
+
+/**
+ * Seals a JSON message padded with trailing spaces to a multiple of `PAD_TO` bytes. Without
+ * padding the ciphertext length would reveal the exact length of clipboard text or of the
+ * file names (a six-digit code, a password length). Trailing whitespace is valid JSON, so the
+ * desktop parses the plaintext unchanged.
+ */
+export function sealJson(mk: MessageKey, label: string, value: unknown): { v: number; epk: string; ct: string } {
+  const json = utf8(JSON.stringify(value));
+  const padded = new Uint8Array(Math.ceil(Math.max(json.length, 1) / PAD_TO) * PAD_TO).fill(0x20);
+  padded.set(json, 0);
+  return sealMessage(mk, label, padded);
+}
+
 export function chunkCount(plainSize: number): number {
   return Math.max(1, Math.ceil(plainSize / CHUNK));
 }

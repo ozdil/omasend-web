@@ -35,7 +35,7 @@ OmaSend masaüstü motoru bu uygulamayı kendisi `http://<masaüstü-ip>:53317/w
 
 ## Güvenlik ve gizlilik: bilmen gerekenler
 
-- **Gönderdiklerin uçtan uca şifrelenir**; ağdaki biri yalnızca bir aktarım olduğunu ve boyutunu görür, başka bir şey görmez. **Sayfanın kendisi hâlâ düz HTTP ile yüklenir.** Ağındaki aktif bir saldırgan sayfayı yüklerken değiştirilmiş bir sürüm sunabilir; bu yüzden yalnızca güvendiğin ağda aç ve eşleştir (sabit, kurulabilir bir sayfa yol haritasında).
+- **Gönderdiklerin uçtan uca şifrelenir**; ağdaki biri yalnızca bir aktarım olduğunu, dosya boyutlarını ve (256 baytlık adımlarla) metin uzunluğunu görür, başka bir şey görmez. **Sayfanın kendisi hâlâ düz HTTP ile yüklenir.** Ağındaki aktif bir saldırgan sayfayı yüklerken değiştirilmiş bir sürüm sunabilir; bu yüzden yalnızca güvendiğin ağda aç ve eşleştir (sabit, kurulabilir bir sayfa yol haritasında).
 - **Cihaz anahtarı bu tarayıcı profilinde (IndexedDB) şifrelenmeden saklanır.** Tarayıcı profiline erişebilen biri onu kopyalayıp bu tarayıcı adına masaüstüne gönderim yapabilir. **Ayarlar → "Bu tarayıcıyı unut"** anahtarı, adı ve eşleşmeyi siler. Tarayıcıyı masaüstünün eşleşmiş cihazlarından da kaldır.
 - Eşleştirirken "Benim cihazım / Başkasının" seçimi yalnızca tarayıcıda bir etiket koyar. Masaüstü tarayıcıya ne kadar güveneceğine kendisi karar verir.
 - Analitik ve üçüncü taraf isteği yok. `index.html` içinde sıkı bir İçerik Güvenliği Politikası (CSP) var.

@@ -22,11 +22,14 @@ import {
   ciphertextLength,
   encryptFileStream,
   newMessageKey,
-  sealMessage,
+  sealJson,
   verifyAdvert,
   type MessageKey,
 } from './e2e';
 import type { PairOffer } from './pairuri';
+
+/** The client kind this page pairs as; part of the signed pairing transcript. */
+export const CLIENT_WEB = 'web';
 
 export class ApiError extends Error {
   constructor(
@@ -117,8 +120,8 @@ export interface PairedDesktop {
 /** Builds the POST /api/v2/pair body for this browser (initiator) and a scanned offer. */
 export function buildPairRequest(key: DeviceKey, offer: PairOffer, myName: string) {
   const mac = pairMac(offer.secret, offer.pk, key.pkB64);
-  const sig = signB64(key, utf8(pairTranscript(offer.pk, key.pkB64, mac)));
-  return { pk: key.pkB64, name: myName, mac, sig, client: 'web' };
+  const sig = signB64(key, utf8(pairTranscript(offer.pk, key.pkB64, mac, CLIENT_WEB)));
+  return { pk: key.pkB64, name: myName, mac, sig, client: CLIENT_WEB };
 }
 
 /** Checks the responder's reply against the key pinned in the QR code. Throws on mismatch. */
@@ -127,7 +130,7 @@ export function verifyPairResponse(key: DeviceKey, offer: PairOffer, resp: Recor
   const rPk = decodePk(resp.pk);
   if (!rPk) throw new Error('pair_key_mismatch');
   const mac = pairMac(offer.secret, offer.pk, key.pkB64);
-  if (typeof resp.sig !== 'string' || !verifyB64(rPk, utf8(pairTranscript(offer.pk, key.pkB64, mac)), resp.sig)) {
+  if (typeof resp.sig !== 'string' || !verifyB64(rPk, utf8(pairTranscript(offer.pk, key.pkB64, mac, CLIENT_WEB)), resp.sig)) {
     throw new Error('pair_bad_signature');
   }
   const name = typeof resp.name === 'string' && resp.name.trim() ? resp.name.trim().slice(0, 64) : offer.name;
@@ -193,8 +196,8 @@ export async function requestTransfer(
   body: TransferRequestBody,
 ): Promise<{ status: DecisionStatus; transfer: Transfer }> {
   const mk = newMessageKey(desktopX25519, key.pkB64);
-  const e2e = sealMessage(mk, LABEL_REQUEST, utf8(JSON.stringify(body)));
-  const j = await signedJson(key, 'POST', '/api/p2p/request', { client: 'web', e2e });
+  const e2e = sealJson(mk, LABEL_REQUEST, body);
+  const j = await signedJson(key, 'POST', '/api/p2p/request', { client: CLIENT_WEB, e2e });
   if (typeof j.token !== 'string' || !j.token) throw new ApiError(200, 'Engine returned no transfer token');
   // An engine that did not decrypt the envelope would not know the files; never upload to it.
   if (j.e2e !== true) throw new ApiError(200, 'Engine did not accept the encrypted request');
@@ -299,6 +302,6 @@ export interface ClipboardBody {
 /** POST /api/p2p/clipboard with the text encrypted for the desktop. */
 export async function sendClipboard(key: DeviceKey, desktopX25519: string, body: ClipboardBody): Promise<void> {
   const mk = newMessageKey(desktopX25519, key.pkB64);
-  const e2e = sealMessage(mk, LABEL_CLIPBOARD, utf8(JSON.stringify(body)));
-  await signedJson(key, 'POST', '/api/p2p/clipboard', { client: 'web', e2e });
+  const e2e = sealJson(mk, LABEL_CLIPBOARD, body);
+  await signedJson(key, 'POST', '/api/p2p/clipboard', { client: CLIENT_WEB, e2e });
 }

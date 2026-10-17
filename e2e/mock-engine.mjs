@@ -198,7 +198,8 @@ const server = createServer(async (req, res) => {
       if (!iPk || iPk.length !== 32) return reject(res, req, 403, 'Invalid public key');
       const mac = hex(hmac(sha256, offerSecret, enc(`omasend-pair-v2|${myPk}|${v.pk}`)));
       if (mac !== v.mac) return reject(res, req, 403, 'No matching pairing offer (wrong or expired QR code)');
-      const transcript = enc(`omasend-pair-v2|${myPk}|${v.pk}|${mac}`);
+      // A web client signs the transcript with its client kind appended (see PROTOCOL_V2.md).
+      const transcript = enc(`omasend-pair-v2|${myPk}|${v.pk}|${mac}` + (v.client === 'web' ? '|web' : ''));
       const sig = unb64(v.sig || '');
       if (!sig || sig.length !== 64 || !ed25519.verify(sig, transcript, iPk, { zip215: false })) return reject(res, req, 403, 'Invalid initiator signature');
       offerSecret = new Uint8Array(randomBytes(32)); // single use
