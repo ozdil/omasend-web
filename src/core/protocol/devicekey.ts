@@ -68,9 +68,15 @@ export function pairMac(secret: Uint8Array, responderPk: string, initiatorPk: st
   return toHex(hmac(sha256, secret, utf8(`${PAIR_DOMAIN}|${responderPk}|${initiatorPk}`)));
 }
 
-/** "omasend-pair-v2|" + R_pk + "|" + I_pk + "|" + mac: signed by both sides. */
-export function pairTranscript(responderPk: string, initiatorPk: string, mac: string): string {
-  return `${PAIR_DOMAIN}|${responderPk}|${initiatorPk}|${mac}`;
+/**
+ * "omasend-pair-v2|" + R_pk + "|" + I_pk + "|" + mac, plus "|" + client for a non-native client:
+ * signed by both sides. The browser signs as `web`, so nobody on the path can strip the
+ * `client` field and make the desktop treat this key as a native one (which would later accept
+ * unencrypted requests from it). Native apps keep the four-part transcript.
+ */
+export function pairTranscript(responderPk: string, initiatorPk: string, mac: string, client = ''): string {
+  const base = `${PAIR_DOMAIN}|${responderPk}|${initiatorPk}|${mac}`;
+  return client ? `${base}|${client}` : base;
 }
 
 // ------------------------------------------------------------------ signed requests

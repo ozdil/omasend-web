@@ -41,6 +41,7 @@ const en = {
   clearButton: 'Clear',
   requesting: (n: string) => `Asking ${n}…`,
   waitingApproval: (n: string) => `Waiting for approval on ${n}…`,
+  encrypting: (i: number, n: number) => `Encrypting file ${i} of ${n}…`,
   uploading: (i: number, n: number) => `Sending file ${i} of ${n}…`,
   sentAll: (n: number) => `${n} file(s) sent.`,
   rejected: 'The desktop declined the transfer.',
@@ -78,7 +79,8 @@ const en = {
   settingsVersion: 'Version',
 
   storageUnavailable: 'This browser does not allow the page to store data (IndexedDB), so it cannot keep a device key. Private windows often block this.',
-  insecureNote: 'Connection to the desktop is not encrypted (plain http on your local network). Requests are signed, but others on the network can read what you send.',
+  encryptedNote:
+    'Files and text are encrypted end to end for this desktop before they leave the browser; others on the network see only sizes. The page itself still loads over plain http, so open it only on a network you trust.',
 
   errNetwork: 'The desktop is not reachable.',
   errSignature: (m: string) => `The desktop rejected the signature (${m}). Check that this device's clock is correct.`,
@@ -89,6 +91,8 @@ const en = {
   errIntegrity: (m: string) => `Integrity check failed: ${m}`,
   errRateLimited: 'Too many attempts. Wait a minute and try again.',
   errOther: (s: number, m: string) => `Error (HTTP ${s}): ${m}`,
+  errNoEncryption: 'This desktop does not offer end-to-end encryption yet. Update OmaSend on the desktop; nothing is sent unencrypted.',
+  errPageOutdated: 'This page is out of date for the desktop. Reload it and try again.',
   errPairKeyMismatch: 'The desktop answered with a different key than the QR code. Pairing was not saved.',
   errPairBadSig: "The desktop's answer is not correctly signed. Pairing was not saved.",
   errPairRefused: (m: string) => `Pairing refused: ${m}. Make a new QR code on the desktop and try again.`,
@@ -149,6 +153,7 @@ const tr: Strings = {
   clearButton: 'Temizle',
   requesting: (n) => `${n} soruluyor…`,
   waitingApproval: (n) => `${n} üzerinde onay bekleniyor…`,
+  encrypting: (i, n) => `Dosya şifreleniyor: ${i} / ${n}…`,
   uploading: (i, n) => `Dosya gönderiliyor: ${i} / ${n}…`,
   sentAll: (n) => `${n} dosya gönderildi.`,
   rejected: 'Masaüstü aktarımı reddetti.',
@@ -186,7 +191,8 @@ const tr: Strings = {
   settingsVersion: 'Sürüm',
 
   storageUnavailable: 'Bu tarayıcı sayfanın veri saklamasına (IndexedDB) izin vermiyor, bu yüzden cihaz anahtarı tutulamıyor. Gizli pencereler bunu sıklıkla engeller.',
-  insecureNote: 'Masaüstüyle bağlantı şifreli değil (yerel ağda düz http). İstekler imzalanır, ama ağdaki başkaları gönderdiklerini okuyabilir.',
+  encryptedNote:
+    'Dosyalar ve metin tarayıcıdan çıkmadan önce bu masaüstü için uçtan uca şifrelenir; ağdakiler yalnızca boyutları görür. Sayfanın kendisi hâlâ düz http ile yüklenir, bu yüzden yalnızca güvendiğin ağlarda aç.',
 
   errNetwork: 'Masaüstüne erişilemiyor.',
   errSignature: (m) => `Masaüstü imzayı reddetti (${m}). Bu cihazın saatinin doğru olduğunu kontrol et.`,
@@ -197,6 +203,8 @@ const tr: Strings = {
   errIntegrity: (m) => `Bütünlük kontrolü başarısız: ${m}`,
   errRateLimited: 'Çok fazla deneme. Bir dakika bekleyip tekrar dene.',
   errOther: (s, m) => `Hata (HTTP ${s}): ${m}`,
+  errNoEncryption: 'Bu masaüstü henüz uçtan uca şifreleme sunmuyor. Masaüstündeki OmaSend\'i güncelle; hiçbir şey şifresiz gönderilmez.',
+  errPageOutdated: 'Bu sayfa masaüstüne göre eski. Sayfayı yenileyip tekrar dene.',
   errPairKeyMismatch: 'Masaüstü QR koddakinden farklı bir anahtarla yanıt verdi. Eşleşme kaydedilmedi.',
   errPairBadSig: 'Masaüstünün yanıtı doğru imzalanmamış. Eşleşme kaydedilmedi.',
   errPairRefused: (m) => `Eşleştirme reddedildi: ${m}. Masaüstünde yeni bir QR kod oluşturup tekrar dene.`,

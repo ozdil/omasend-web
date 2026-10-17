@@ -16,7 +16,20 @@ import {
   type DeviceKey,
 } from './devicekey';
 import { utf8 } from './encoding';
+import {
+  LABEL_CLIPBOARD,
+  LABEL_REQUEST,
+  ciphertextLength,
+  encryptFileStream,
+  newMessageKey,
+  sealJson,
+  verifyAdvert,
+  type MessageKey,
+} from './e2e';
 import type { PairOffer } from './pairuri';
+
+/** The client kind this page pairs as; part of the signed pairing transcript. */
+export const CLIENT_WEB = 'web';
 
 export class ApiError extends Error {
   constructor(
@@ -55,8 +68,9 @@ export function decisionPath(token: string): string {
   return `/api/p2p/decision?token=${encodeURIComponent(token)}`;
 }
 
-export function uploadPath(token: string, filename: string): string {
-  return `/api/p2p/upload?token=${encodeURIComponent(token)}&filename=${encodeURIComponent(filename)}`;
+/** Encrypted uploads name the file by its index in the (encrypted) transfer request. */
+export function uploadPath(token: string, index: number): string {
+  return `/api/p2p/upload?token=${encodeURIComponent(token)}&index=${index}`;
 }
 
 /**
@@ -99,13 +113,15 @@ export interface PairedDesktop {
   pk: string;
   name: string;
   deviceId: string;
+  /** Verified X25519 key for end-to-end encryption; missing when the desktop is older. */
+  x25519?: string;
 }
 
 /** Builds the POST /api/v2/pair body for this browser (initiator) and a scanned offer. */
 export function buildPairRequest(key: DeviceKey, offer: PairOffer, myName: string) {
   const mac = pairMac(offer.secret, offer.pk, key.pkB64);
-  const sig = signB64(key, utf8(pairTranscript(offer.pk, key.pkB64, mac)));
-  return { pk: key.pkB64, name: myName, mac, sig, client: 'web' };
+  const sig = signB64(key, utf8(pairTranscript(offer.pk, key.pkB64, mac, CLIENT_WEB)));
+  return { pk: key.pkB64, name: myName, mac, sig, client: CLIENT_WEB };
 }
 
 /** Checks the responder's reply against the key pinned in the QR code. Throws on mismatch. */
@@ -114,11 +130,33 @@ export function verifyPairResponse(key: DeviceKey, offer: PairOffer, resp: Recor
   const rPk = decodePk(resp.pk);
   if (!rPk) throw new Error('pair_key_mismatch');
   const mac = pairMac(offer.secret, offer.pk, key.pkB64);
-  if (typeof resp.sig !== 'string' || !verifyB64(rPk, utf8(pairTranscript(offer.pk, key.pkB64, mac)), resp.sig)) {
+  if (typeof resp.sig !== 'string' || !verifyB64(rPk, utf8(pairTranscript(offer.pk, key.pkB64, mac, CLIENT_WEB)), resp.sig)) {
     throw new Error('pair_bad_signature');
   }
   const name = typeof resp.name === 'string' && resp.name.trim() ? resp.name.trim().slice(0, 64) : offer.name;
-  return { pk: offer.pk, name: name || 'OmaSend', deviceId: deviceIdForPk(rPk) };
+  const out: PairedDesktop = { pk: offer.pk, name: name || 'OmaSend', deviceId: deviceIdForPk(rPk) };
+  // The encryption key rides along, signed by the key we just verified. An unsigned or
+  // tampered one is ignored (never trusted), and the page asks for it again later.
+  const x = verifyAdvert(rPk, offer.pk, resp.e2e);
+  if (x) out.x25519 = x;
+  return out;
+}
+
+/**
+ * GET /api/v2/e2e (signed): the desktop's X25519 key for a pairing made before encryption
+ * existed. Returns null when the desktop does not offer one (older engine) or the advert does
+ * not verify against the pinned key; the caller then refuses to send.
+ */
+export async function fetchE2eKey(key: DeviceKey, desktopPk: string): Promise<string | null> {
+  const dPk = decodePk(desktopPk);
+  if (!dPk) return null;
+  try {
+    const j = await signedJson(key, 'GET', '/api/v2/e2e');
+    return verifyAdvert(dPk, desktopPk, j);
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) return null;
+    throw e;
+  }
 }
 
 export async function pair(key: DeviceKey, offer: PairOffer, myName: string): Promise<PairedDesktop> {
@@ -133,21 +171,37 @@ export async function pair(key: DeviceKey, offer: PairOffer, myName: string): Pr
   return verifyPairResponse(key, offer, await readJson(resp));
 }
 
+/** The metadata the desktop sees after decrypting; it never travels in clear text. */
 export interface TransferRequestBody {
-  /** Not needed by engines that accept signed requests without an OmaID; kept for older engines. */
-  oma_id: string;
   sender_name: string;
   files: { name: string; size_bytes: number }[];
   total_size_bytes: number;
-  client: 'web';
+}
+
+/** A transfer in progress: the token and the key that encrypts its files. */
+export interface Transfer {
+  token: string;
+  mk: MessageKey;
 }
 
 export type DecisionStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'EXPIRED' | 'NOT_FOUND';
 
-export async function requestTransfer(key: DeviceKey, body: TransferRequestBody): Promise<{ status: DecisionStatus; token: string }> {
-  const j = await signedJson(key, 'POST', '/api/p2p/request', body);
+/**
+ * POST /api/p2p/request with the metadata encrypted for `desktopX25519`. The signed outer body
+ * only shows that a transfer is being requested; names and sizes are inside the envelope.
+ */
+export async function requestTransfer(
+  key: DeviceKey,
+  desktopX25519: string,
+  body: TransferRequestBody,
+): Promise<{ status: DecisionStatus; transfer: Transfer }> {
+  const mk = newMessageKey(desktopX25519, key.pkB64);
+  const e2e = sealJson(mk, LABEL_REQUEST, body);
+  const j = await signedJson(key, 'POST', '/api/p2p/request', { client: CLIENT_WEB, e2e });
   if (typeof j.token !== 'string' || !j.token) throw new ApiError(200, 'Engine returned no transfer token');
-  return { status: j.status === 'ACCEPTED' ? 'ACCEPTED' : 'PENDING', token: j.token };
+  // An engine that did not decrypt the envelope would not know the files; never upload to it.
+  if (j.e2e !== true) throw new ApiError(200, 'Engine did not accept the encrypted request');
+  return { status: j.status === 'ACCEPTED' ? 'ACCEPTED' : 'PENDING', transfer: { token: j.token, mk } };
 }
 
 export async function pollDecision(key: DeviceKey, token: string, signal?: AbortSignal): Promise<DecisionStatus> {
@@ -162,29 +216,65 @@ export async function pollDecision(key: DeviceKey, token: string, signal?: Abort
 }
 
 /**
- * POST /api/p2p/upload with the file as the raw body. XMLHttpRequest instead of fetch because
- * fetch cannot report upload progress. The browser sets Content-Length to file.size, which is
- * what "stream:<size>" signs.
+ * Encrypts `file` chunk by chunk into a Blob. HTTP/1.1 cannot stream a request body from the
+ * browser, so the ciphertext is assembled first; it is kept as Blob parts (which the browser
+ * may page out), with one chunk of plaintext in memory at a time.
  */
-export function uploadFile(
+async function encryptToBlob(mk: MessageKey, index: number, file: Blob, onProgress: (done: number) => void, signal?: AbortSignal): Promise<Blob> {
+  const reader = encryptFileStream(mk, index, file).getReader();
+  const parts: Blob[] = [];
+  let pending: Uint8Array[] = [];
+  let pendingBytes = 0;
+  let done = 0;
+  for (;;) {
+    if (signal?.aborted) {
+      await reader.cancel();
+      throw new DOMException('Aborted', 'AbortError');
+    }
+    const { value, done: end } = await reader.read();
+    if (end) break;
+    pending.push(value);
+    pendingBytes += value.length;
+    done += value.length;
+    onProgress(done);
+    if (pendingBytes >= 64 * 1024 * 1024) {
+      parts.push(new Blob(pending as BlobPart[]));
+      pending = [];
+      pendingBytes = 0;
+    }
+  }
+  if (pending.length) parts.push(new Blob(pending as BlobPart[]));
+  return new Blob(parts, { type: 'application/octet-stream' });
+}
+
+/**
+ * POST /api/p2p/upload?token=..&index=.. with the encrypted file as the raw body.
+ * XMLHttpRequest instead of fetch because fetch cannot report upload progress. The body length
+ * is exactly `ciphertextLength(file.size)`, which is what "stream:<size>" signs. `onProgress`
+ * reports 0..1 over both phases (encrypting, then sending).
+ */
+export async function uploadFile(
   key: DeviceKey,
-  token: string,
-  filename: string,
+  transfer: Transfer,
+  index: number,
   file: Blob,
-  onProgress: (sent: number, total: number) => void,
+  onProgress: (fraction: number, phase: 'encrypting' | 'sending') => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const target = wireTarget(uploadPath(token, filename));
-  const headers = signedHeaders(key, 'POST', target.pathAndQuery, bodyTagStream(file.size));
+  const total = ciphertextLength(file.size);
+  const body = await encryptToBlob(transfer.mk, index, file, (n) => onProgress(total > 0 ? (0.5 * n) / total : 0.5, 'encrypting'), signal);
+  if (body.size !== total) throw new ApiError(0, 'Encryption produced an unexpected length');
+  const target = wireTarget(uploadPath(transfer.token, index));
+  const headers = signedHeaders(key, 'POST', target.pathAndQuery, bodyTagStream(total));
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', target.href);
     for (const [k, v] of Object.entries(headers)) xhr.setRequestHeader(k, v);
     xhr.setRequestHeader('Content-Type', 'application/octet-stream');
-    xhr.upload.onprogress = (ev) => onProgress(ev.loaded, ev.lengthComputable ? ev.total : file.size);
+    xhr.upload.onprogress = (ev) => onProgress(0.5 + 0.5 * (total > 0 ? ev.loaded / total : 1), 'sending');
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
-        onProgress(file.size, file.size);
+        onProgress(1, 'sending');
         resolve();
       } else {
         reject(new ApiError(xhr.status, errorText(xhr.status, xhr.responseText)));
@@ -199,7 +289,7 @@ export function uploadFile(
       }
       signal.addEventListener('abort', () => xhr.abort(), { once: true });
     }
-    xhr.send(file);
+    xhr.send(body);
   });
 }
 
@@ -207,10 +297,11 @@ export interface ClipboardBody {
   text: string;
   content_type: 'text';
   sender_name: string;
-  oma_id: string;
-  client: 'web';
 }
 
-export async function sendClipboard(key: DeviceKey, body: ClipboardBody): Promise<void> {
-  await signedJson(key, 'POST', '/api/p2p/clipboard', body);
+/** POST /api/p2p/clipboard with the text encrypted for the desktop. */
+export async function sendClipboard(key: DeviceKey, desktopX25519: string, body: ClipboardBody): Promise<void> {
+  const mk = newMessageKey(desktopX25519, key.pkB64);
+  const e2e = sealJson(mk, LABEL_CLIPBOARD, body);
+  await signedJson(key, 'POST', '/api/p2p/clipboard', { client: CLIENT_WEB, e2e });
 }

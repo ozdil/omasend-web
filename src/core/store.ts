@@ -6,7 +6,6 @@
  * "Forget this browser" deletes the whole database.
  */
 import { deviceKeyFromSeed, generateSeed, type DeviceKey } from './protocol/devicekey';
-import { OmaIdEngine } from './identity/omaid';
 
 const DB_NAME = 'omasend-web';
 const STORE = 'kv';
@@ -14,8 +13,6 @@ const STORE = 'kv';
 export interface Profile {
   /** Name shown on the desktop (the engine keeps at most 64 characters). */
   name: string;
-  /** Formatted 16-digit Luhn OmaID: still required by the engine's /api/p2p/request handler. */
-  omaId: string;
 }
 
 export interface Pairing {
@@ -25,6 +22,11 @@ export interface Pairing {
   pairedAt: number;
   /** Local label only ("this is my device"); the desktop decides its own trust. */
   own: boolean;
+  /**
+   * The desktop's X25519 key for end-to-end encryption (b64url), verified against `pk`.
+   * Missing on pairings made before encryption existed; fetched and verified on first use.
+   */
+  x25519?: string;
 }
 
 function req<T>(r: IDBRequest<T>): Promise<T> {
@@ -84,8 +86,9 @@ export async function loadOrCreateDeviceKey(): Promise<DeviceKey> {
 
 export async function loadOrCreateProfile(defaultName: string): Promise<Profile> {
   const stored = await get<Profile>('profile');
-  if (stored && typeof stored.name === 'string' && OmaIdEngine.validate(stored.omaId)) return stored;
-  const profile: Profile = { name: defaultName, omaId: OmaIdEngine.generate() };
+  // Older profiles also carried a random OmaID; it is no longer sent and simply dropped.
+  if (stored && typeof stored.name === 'string' && stored.name.trim()) return { name: stored.name };
+  const profile: Profile = { name: defaultName };
   await put('profile', profile);
   return profile;
 }

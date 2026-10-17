@@ -12,7 +12,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="MIT License" /></a>
 </p>
 
-> Pair a phone or laptop browser with your OmaSend desktop by scanning a QR code, then send it files and clipboard text. Nothing to install. **Receiving is not possible from a browser**: to receive, use the OmaSend desktop panel or the Android app.
+> Pair a phone or laptop browser with your OmaSend desktop by scanning a QR code, then send it files and clipboard text, end-to-end encrypted. Nothing to install. **Receiving is not possible from a browser**: to receive, use the OmaSend desktop panel or the Android app.
 
 ---
 
@@ -22,7 +22,7 @@ The OmaSend desktop engine serves this app itself at `http://<desktop-lan-ip>:53
 
 1. **Pair.** On the desktop, choose "Pair a device". The QR code contains
    `http://<ip>:53317/web/#pair=<omasend://pair?v=2&pk=…&s=…>`. Scan it with the phone's camera; the page opens, removes the link from the address bar and asks *"Pair with <desktop> (device id XXXX-XXXX-XXXX-XXXX)?"*. Check that the ID matches the desktop's screen. You can also paste the link, or scan in-page where the browser has `BarcodeDetector`.
-2. **Send files.** Drop or pick files. The desktop asks its user for approval (unless it trusts this browser as one of its own devices); the page shows "Waiting for approval", then uploads each file with progress.
+2. **Send files.** Drop or pick files. The desktop asks its user for approval (unless it trusts this browser as one of its own devices); the page shows "Waiting for approval", then encrypts and uploads each file with progress.
 3. **Send text.** Type or paste text and send it to the desktop clipboard.
 
 It implements [OmaSend protocol v2](https://github.com/ozdil/omarchy-omasend/blob/main/PROTOCOL_V2.md), Phase 1:
@@ -30,14 +30,14 @@ It implements [OmaSend protocol v2](https://github.com/ozdil/omarchy-omasend/blo
 - The browser has its own Ed25519 device key (random 32-byte seed). Its device ID is the first 8 bytes of SHA-256(public key).
 - Pairing: `POST /api/v2/pair` with an HMAC over both public keys (keyed with the QR secret) and an Ed25519 signature. The desktop's answer must come from the key in the QR code and be signed by it, or nothing is stored.
 - Every request to `/api/p2p/*` is signed (`X-OmaSend-Pk`, `-Ts`, `-Nonce`, `-Sig`) over method, path and query exactly as sent, timestamp, nonce and a SHA-256 body tag (`stream:<size>` for uploads).
-- Crypto is pure JavaScript ([@noble/curves](https://github.com/paulmillr/noble-curves), [@noble/hashes](https://github.com/paulmillr/noble-hashes), audited, pinned), because a page on `http://192.168.x.y` is not a secure context and has no WebCrypto. The same test vector as the desktop and Android apps is checked in `test/protocol.test.ts`.
+- **End-to-end encryption** (`omasend-web-e2e-v1`, see PROTOCOL_V2.md "Browser end-to-end encryption"): the desktop publishes an X25519 key signed by the Ed25519 key pinned at pairing. For every request the browser makes a fresh X25519 key, derives a key with HKDF-SHA256 and encrypts the transfer metadata, the clipboard text and each file (64 KiB chunks, counter nonce with a final-chunk flag) with ChaCha20-Poly1305. The desktop decrypts, verifies and only then saves. File names travel only inside the envelope (padded to 256-byte steps); uploads are addressed by index. The pairing signature covers the `client: "web"` field, so the desktop cannot be tricked into treating a browser key as a native one. A desktop that does not offer the key gets nothing: there is no plaintext fallback.
+- Crypto is pure JavaScript ([@noble/curves](https://github.com/paulmillr/noble-curves), [@noble/ciphers](https://github.com/paulmillr/noble-ciphers), [@noble/hashes](https://github.com/paulmillr/noble-hashes); audited, pinned), because a page on `http://192.168.x.y` is not a secure context and has no WebCrypto. The same test vectors as the desktop engine are checked in `test/protocol.test.ts` and `test/e2e.test.ts`.
 
 ## Security and privacy: what to know
 
-- **Not encrypted in transit.** The page and its requests use plain HTTP on your local network. Requests are authenticated (signed), but anyone on the same network can read the files and text you send. Use it on networks you trust.
+- **What you send is encrypted end to end** for the paired desktop; someone on the network sees that a transfer happens, the file sizes and the length of the text in 256-byte steps, nothing more. **The page itself still loads over plain HTTP.** An active attacker on your network could serve a modified page while you load it, so open and pair only on a network you trust (a fixed, installable page is on the roadmap).
 - **The device key is stored unencrypted** in this browser's profile (IndexedDB). Anyone who can access the browser profile can copy it and send to your desktop as this browser. **Settings → "Forget this browser"** deletes the key, name and pairing. Also remove the browser from the desktop's paired devices.
 - "This is my device / Someone else's" when pairing only sets a label in the browser. The desktop decides its own trust level for the browser.
-- The app still sends a random 16-digit OmaID with transfer requests, because the engine requires one; it carries no trust.
 - No analytics, no third-party requests. A strict Content Security Policy is set in `index.html`.
 - The service worker (offline shell) only registers in a secure context (e.g. `localhost`); on a LAN `http://` address it is skipped.
 
