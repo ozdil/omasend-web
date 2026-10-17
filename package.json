@@ -1,6 +1,6 @@
 {
   "name": "omasend-web",
-  "version": "1.8.0",
+  "version": "2.0.9",
   "private": true,
   "description": "OmaSend web client: pair with your desktop and send it files and text (protocol v2)",
   "type": "module",
