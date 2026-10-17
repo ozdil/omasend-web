@@ -13,7 +13,9 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ed25519 } from '@noble/curves/ed25519.js';
+import { chacha20poly1305 } from '@noble/ciphers/chacha.js';
+import { ed25519, x25519 } from '@noble/curves/ed25519.js';
+import { hkdf } from '@noble/hashes/hkdf.js';
 import { hmac } from '@noble/hashes/hmac.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { randomBytes } from 'node:crypto';
@@ -64,6 +66,52 @@ const sanitize = (raw) => {
 
 const seed = new Uint8Array(randomBytes(32));
 const myPk = b64(ed25519.getPublicKey(seed));
+
+// ---- webe2e (src/webe2e.rs): static X25519 key derived from the seed, signed advert,
+// per-message HKDF key, ChaCha20-Poly1305 messages and 64 KiB file chunks.
+const E2E = 'omasend-web-e2e-v1';
+const CHUNK = 64 * 1024;
+const xSecret = hkdf(sha256, seed, enc(`${E2E} static`), enc('x25519'), 32);
+const xPk = x25519.getPublicKey(xSecret);
+const e2eAdvert = () => ({ v: 1, x25519: b64(xPk), sig: b64(ed25519.sign(enc(`${E2E}|${myPk}|${b64(xPk)}`), seed)) });
+const subkey = (k, label) => hmac(sha256, k, enc(`${E2E}|${label}`));
+function messageKey(epkB64, browserPk) {
+  const epk = unb64(epkB64 || '');
+  if (!epk || epk.length !== 32) throw new Error('Invalid ephemeral key');
+  const shared = x25519.getSharedSecret(xSecret, epk);
+  const salt = new Uint8Array(64);
+  salt.set(epk, 0);
+  salt.set(xPk, 32);
+  return hkdf(sha256, shared, salt, enc(`${E2E}|${browserPk}`), 32);
+}
+/** Decrypts body.e2e for a browser key; returns [key, innerJson]. Throws like the engine's 400. */
+function openEnvelope(body, browserPk, label) {
+  const env = body.e2e;
+  if (!env) throw new Error('This browser page is out of date: reload it to send encrypted');
+  if (env.v !== 1) throw new Error('Unsupported encryption version');
+  const k = messageKey(env.epk, browserPk);
+  const pt = chacha20poly1305(subkey(k, label), new Uint8Array(12), enc(label)).decrypt(unb64(env.ct || ''));
+  return [k, JSON.parse(Buffer.from(pt).toString('utf8'))];
+}
+function decryptFile(k, index, size, ct) {
+  const fk = subkey(k, `file|${index}`);
+  const n = Math.max(1, Math.ceil(size / CHUNK));
+  if (ct.length !== size + n * 16) throw new Error('Upload size does not match the approved transfer request');
+  const out = [];
+  let o = 0;
+  for (let i = 0; i < n; i++) {
+    const plainLen = Math.min(CHUNK, size - i * CHUNK);
+    const nonce = new Uint8Array(12);
+    nonce[3] = i + 1 === n ? 1 : 0;
+    nonce[11] = i & 255;
+    nonce[10] = (i >>> 8) & 255;
+    nonce[9] = (i >>> 16) & 255;
+    nonce[8] = (i >>> 24) & 255;
+    out.push(chacha20poly1305(fk, nonce).decrypt(ct.subarray(o, o + plainLen + 16)));
+    o += plainLen + 16;
+  }
+  return Buffer.concat(out);
+}
 const NAME = process.env.MOCK_NAME || 'Mock Desk & Co ç';
 let offerSecret = new Uint8Array(randomBytes(32));
 
@@ -156,24 +204,44 @@ const server = createServer(async (req, res) => {
       offerSecret = new Uint8Array(randomBytes(32)); // single use
       state.trusted.push({ pk: v.pk, name: String(v.name).slice(0, 64), client: v.client, device_id: devId(iPk) });
       state.pairs++;
-      return json(res, 200, { quic_port: 53318, pk: myPk, name: NAME, device_id: devId(unb64(myPk)), sig: b64(ed25519.sign(transcript, seed)) });
+      const out = { quic_port: 53318, pk: myPk, name: NAME, device_id: devId(unb64(myPk)), sig: b64(ed25519.sign(transcript, seed)) };
+      if (v.client === 'web' && !process.env.MOCK_NO_E2E) out.e2e = e2eAdvert();
+      return json(res, 200, out);
+    }
+
+    if (req.method === 'GET' && path === '/api/v2/e2e') {
+      const auth = verifySigned(req, hex(sha256(new Uint8Array(0))));
+      if (!auth.ok) return reject(res, req, 403, 'Peer is not paired');
+      if (process.env.MOCK_NO_E2E) return reject(res, req, 404, 'Not found');
+      return json(res, 200, e2eAdvert());
     }
 
     if (req.method === 'POST' && path === '/api/p2p/request') {
       const body = await readBody(req);
       const auth = verifySigned(req, hex(sha256(body)));
       if (!auth.ok) return reject(res, req, auth.why === 'unsigned' || auth.why === 'Unknown device key' ? 403 : 401, `Signature rejected: ${auth.why}`, { canon: auth.canon });
-      const v = JSON.parse(body.toString('utf8'));
-      if (!luhn(v.oma_id)) return reject(res, req, 403, 'Valid 16-digit OmaID required to send files');
+      const outer = JSON.parse(body.toString('utf8'));
+      let key = null;
+      let v = outer;
+      if (auth.key.client === 'web') {
+        // Browser keys must encrypt; the file list only exists inside the envelope.
+        try {
+          [key, v] = openEnvelope(outer, auth.key.pk, 'request');
+        } catch (e) {
+          return reject(res, req, 400, e.message, { e2e_required: true });
+        }
+      } else if (!luhn(v.oma_id)) return reject(res, req, 403, 'Valid 16-digit OmaID required to send files');
       const token = hex(randomBytes(16));
       state.transfers[token] = {
         status: PENDING_POLLS > 0 ? 'PENDING' : 'ACCEPTED',
         polls: 0,
         files: (v.files || []).map((f) => ({ name: sanitize(f.name), size_bytes: f.size_bytes })),
         sender_pk: auth.key.pk,
+        key,
+        done: [],
         body: v,
       };
-      return json(res, 200, { status: state.transfers[token].status, is_trusted: true, verified_device: true, is_same_owner: false, token });
+      return json(res, 200, { status: state.transfers[token].status, is_trusted: true, verified_device: true, is_same_owner: false, e2e: key !== null, token });
     }
 
     if (req.method === 'GET' && path === '/api/p2p/decision') {
@@ -189,12 +257,31 @@ const server = createServer(async (req, res) => {
     if (req.method === 'POST' && path === '/api/p2p/upload') {
       const t = state.transfers[params.get('token')];
       if (!t || t.status !== 'ACCEPTED') return reject(res, req, 403, 'Unauthorized or expired transfer token');
-      const name = sanitize(urlDecode(params.get('filename') || ''));
-      const idx = t.files.findIndex((f) => f.name === name);
-      if (idx < 0) return reject(res, req, 403, 'File not listed in approved transfer request', { name });
       const len = Number(req.headers['content-length']);
       const auth = verifySigned(req, `stream:${len}`);
       if (!auth.ok || auth.key.pk !== t.sender_pk) return reject(res, req, 401, 'Upload must be signed by the device that requested the transfer', { why: auth.why, canon: auth.canon });
+      if (t.key) {
+        // Encrypted upload: addressed by index, name and size come from the envelope.
+        const idx = Number(params.get('index'));
+        const f = t.files[idx];
+        if (!f || t.done[idx]) return reject(res, req, 403, 'File not listed in approved transfer request', { idx });
+        const n = Math.max(1, Math.ceil(f.size_bytes / CHUNK));
+        if (len !== f.size_bytes + n * 16) return reject(res, req, 413, 'Upload size does not match the approved transfer request');
+        const body = await readBody(req);
+        if (body.length !== len) return reject(res, req, 400, 'Short body');
+        let plain;
+        try {
+          plain = decryptFile(t.key, idx, f.size_bytes, new Uint8Array(body));
+        } catch (e) {
+          return reject(res, req, 422, `File integrity verification failed: ${e.message}`);
+        }
+        t.done[idx] = true;
+        state.files.push({ name: f.name, size: plain.length, sha256: hex(sha256(plain)), encrypted: true });
+        return json(res, 200, { status: 'OK', filename: f.name, size: plain.length, sha256: hex(sha256(plain)) });
+      }
+      const name = sanitize(urlDecode(params.get('filename') || ''));
+      const idx = t.files.findIndex((f) => f.name === name);
+      if (idx < 0) return reject(res, req, 403, 'File not listed in approved transfer request', { name });
       if (len !== t.files[idx].size_bytes) return reject(res, req, 413, 'Upload size does not match the approved transfer request');
       const body = await readBody(req);
       if (body.length !== len) return reject(res, req, 400, 'Short body');
@@ -207,9 +294,18 @@ const server = createServer(async (req, res) => {
       const body = await readBody(req);
       const auth = verifySigned(req, hex(sha256(body)));
       if (!auth.ok) return reject(res, req, auth.why === 'unsigned' ? 403 : 401, `Signature rejected: ${auth.why}`, { canon: auth.canon });
-      const v = JSON.parse(body.toString('utf8'));
+      let v = JSON.parse(body.toString('utf8'));
+      let encrypted = false;
+      if (auth.key.client === 'web') {
+        try {
+          [, v] = openEnvelope(v, auth.key.pk, 'clipboard');
+          encrypted = true;
+        } catch (e) {
+          return reject(res, req, 400, e.message, { e2e_required: true });
+        }
+      }
       if (typeof v.text !== 'string') return reject(res, req, 400, 'Invalid clipboard payload');
-      state.clipboard.push({ text: v.text, content_type: v.content_type, sender_name: v.sender_name });
+      state.clipboard.push({ text: v.text, content_type: v.content_type, sender_name: v.sender_name, encrypted });
       return json(res, 200, { status: 'OK' });
     }
 

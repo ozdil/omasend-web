@@ -89,12 +89,11 @@ describe('signed upload URL', () => {
 
   it('builds the canonical string from exactly the URL that is sent', () => {
     const token = '0123456789abcdef0123456789abcdef';
-    const path = uploadPath(token, name);
-    expect(path).toBe(
-      '/api/p2p/upload?token=0123456789abcdef0123456789abcdef&filename=%C3%87i%C3%A7ek%20%C4%9F%C3%BC%C5%9F%C4%B1%20%E6%97%A5%E6%9C%AC%201.txt',
-    );
-    // The engine decodes filename= byte-wise (urlencoding_decode) and gets the name back.
-    expect(urlDecode(path.split('filename=')[1])).toBe(name);
+    // Encrypted uploads carry only the file index: the name stays inside the envelope.
+    const path = uploadPath(token, 2);
+    expect(path).toBe('/api/p2p/upload?token=0123456789abcdef0123456789abcdef&index=2');
+    // The engine decodes query values byte-wise (urlencoding_decode).
+    expect(urlDecode('%C3%87i%C3%A7ek%20%C4%9F%C3%BC%C5%9F%C4%B1%20%E6%97%A5%E6%9C%AC%201.txt')).toBe(name);
     // A WHATWG URL parser leaves this request target unchanged (what fetch/XHR put on the wire).
     const w = wireTarget(path, 'http://192.168.1.10:53317');
     expect(w.pathAndQuery).toBe(path);
@@ -205,6 +204,20 @@ describe('pairing request and response', () => {
 
     const resp = { pk: responder.pkB64, name: 'desk-host', device_id: responder.deviceId, sig: signB64(responder, transcript), quic_port: 53318 };
     expect(verifyPairResponse(browser, offer, resp)).toEqual({ pk: responder.pkB64, name: 'desk-host', deviceId: 'FE81-2C12-F3AB-4CE6' });
+  });
+
+  it('takes the encryption key from the pair response only when the desktop signed it', () => {
+    const mac = pairMac(secret, responder.pkB64, browser.pkB64);
+    const transcript = utf8(pairTranscript(responder.pkB64, browser.pkB64, mac));
+    const x25519 = 'i4jc1T3UEWi-5t2YzAAjCBEvhgfStTFDplY870idOh4';
+    const good = { v: 1, x25519, sig: 'oF7kdBK8YQt5QQVY6UupXgnzKHgZKR9t6EcfdA0o1If1aqLP87bB4tsUBQmtJQFRJKN7r9jBcCFrNaqnR9j4Cg' };
+    const base = { pk: responder.pkB64, name: 'desk-host', sig: signB64(responder, transcript) };
+    expect(verifyPairResponse(browser, offer, { ...base, e2e: good }).x25519).toBe(x25519);
+    // Swapped key (an attacker's X25519 key under the real signature): dropped, not trusted.
+    const swapped = { ...good, x25519: b64urlEncode(fill(32, 0x21)) };
+    expect(verifyPairResponse(browser, offer, { ...base, e2e: swapped }).x25519).toBeUndefined();
+    expect(verifyPairResponse(browser, offer, { ...base, e2e: { ...good, sig: good.sig.replace('o', 'p') } }).x25519).toBeUndefined();
+    expect(verifyPairResponse(browser, offer, base).x25519).toBeUndefined();
   });
 
   it('rejects a response from another key or with a bad signature', () => {

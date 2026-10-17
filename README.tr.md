@@ -22,7 +22,7 @@ OmaSend masaüstü motoru bu uygulamayı kendisi `http://<masaüstü-ip>:53317/w
 
 1. **Eşleştir.** Masaüstünde "Cihaz eşleştir"i seç. QR kod
    `http://<ip>:53317/web/#pair=<omasend://pair?v=2&pk=…&s=…>` içerir. Telefonun kamerasıyla tara; sayfa açılır, bağlantıyı adres çubuğundan siler ve *"<masaüstü> ile eşleştirilsin mi (cihaz kimliği XXXX-XXXX-XXXX-XXXX)?"* diye sorar. Kimliğin masaüstündekiyle aynı olduğunu kontrol et. Bağlantıyı yapıştırabilir ya da tarayıcıda `BarcodeDetector` varsa sayfa içinde tarayabilirsin.
-2. **Dosya gönder.** Dosyaları bırak veya seç. Masaüstü kullanıcısından onay ister (bu tarayıcıyı kendi cihazı olarak tanımıyorsa); sayfa "onay bekleniyor" gösterir, sonra her dosyayı ilerlemesiyle yükler.
+2. **Dosya gönder.** Dosyaları bırak veya seç. Masaüstü kullanıcısından onay ister (bu tarayıcıyı kendi cihazı olarak tanımıyorsa); sayfa "onay bekleniyor" gösterir, sonra her dosyayı şifreleyip ilerlemesiyle yükler.
 3. **Metin gönder.** Metni yaz veya yapıştır ve masaüstü panosuna gönder.
 
 [OmaSend protokol v2](https://github.com/ozdil/omarchy-omasend/blob/main/PROTOCOL_V2.md) Aşama 1'i uygular:
@@ -30,14 +30,14 @@ OmaSend masaüstü motoru bu uygulamayı kendisi `http://<masaüstü-ip>:53317/w
 - Tarayıcının kendi Ed25519 cihaz anahtarı vardır (rastgele 32 baytlık tohum). Cihaz kimliği, SHA-256(açık anahtar)'ın ilk 8 baytıdır.
 - Eşleştirme: `POST /api/v2/pair`, iki açık anahtar üzerinde QR sırrıyla anahtarlanmış HMAC ve Ed25519 imzası ile. Masaüstünün yanıtı QR koddaki anahtardan gelmeli ve onunla imzalanmış olmalı; yoksa hiçbir şey kaydedilmez.
 - `/api/p2p/*` isteklerinin hepsi imzalanır (`X-OmaSend-Pk`, `-Ts`, `-Nonce`, `-Sig`): yöntem, gönderildiği haliyle yol ve sorgu, zaman damgası, nonce ve SHA-256 gövde etiketi (yüklemelerde `stream:<boyut>`).
-- Kriptografi saf JavaScript'tir ([@noble/curves](https://github.com/paulmillr/noble-curves), [@noble/hashes](https://github.com/paulmillr/noble-hashes); denetlenmiş, sürümü sabit), çünkü `http://192.168.x.y` üzerindeki bir sayfa güvenli bağlam değildir ve WebCrypto'su yoktur. Masaüstü ve Android ile aynı test vektörü `test/protocol.test.ts` içinde kontrol edilir.
+- **Uçtan uca şifreleme** (`omasend-web-e2e-v1`, PROTOCOL_V2.md "Browser end-to-end encryption"): masaüstü, eşleşmede sabitlenen Ed25519 anahtarıyla imzaladığı bir X25519 anahtarı yayımlar. Tarayıcı her istek için yeni bir X25519 anahtarı üretir, HKDF-SHA256 ile anahtar türetir ve aktarım bilgilerini, pano metnini ve her dosyayı (64 KiB parçalar, sayaçlı nonce ve son parça işareti) ChaCha20-Poly1305 ile şifreler. Masaüstü çözer, doğrular ve ancak sonra kaydeder. Dosya adları yalnızca zarfın içinde gider; yüklemeler sıra numarasıyla adreslenir. Anahtar sunmayan bir masaüstüne hiçbir şey gönderilmez: düz metne geri düşme yoktur.
+- Kriptografi saf JavaScript'tir ([@noble/curves](https://github.com/paulmillr/noble-curves), [@noble/ciphers](https://github.com/paulmillr/noble-ciphers), [@noble/hashes](https://github.com/paulmillr/noble-hashes); denetlenmiş, sürümü sabit), çünkü `http://192.168.x.y` üzerindeki bir sayfa güvenli bağlam değildir ve WebCrypto'su yoktur. Masaüstü motoruyla aynı test vektörleri `test/protocol.test.ts` ve `test/e2e.test.ts` içinde kontrol edilir.
 
 ## Güvenlik ve gizlilik: bilmen gerekenler
 
-- **Aktarım şifreli değil.** Sayfa ve istekleri yerel ağda düz HTTP kullanır. İstekler doğrulanır (imzalanır), ama aynı ağdaki herkes gönderdiğin dosyaları ve metni okuyabilir. Güvendiğin ağlarda kullan.
+- **Gönderdiklerin uçtan uca şifrelenir**; ağdaki biri yalnızca bir aktarım olduğunu ve boyutunu görür, başka bir şey görmez. **Sayfanın kendisi hâlâ düz HTTP ile yüklenir.** Ağındaki aktif bir saldırgan sayfayı yüklerken değiştirilmiş bir sürüm sunabilir; bu yüzden yalnızca güvendiğin ağda aç ve eşleştir (sabit, kurulabilir bir sayfa yol haritasında).
 - **Cihaz anahtarı bu tarayıcı profilinde (IndexedDB) şifrelenmeden saklanır.** Tarayıcı profiline erişebilen biri onu kopyalayıp bu tarayıcı adına masaüstüne gönderim yapabilir. **Ayarlar → "Bu tarayıcıyı unut"** anahtarı, adı ve eşleşmeyi siler. Tarayıcıyı masaüstünün eşleşmiş cihazlarından da kaldır.
 - Eşleştirirken "Benim cihazım / Başkasının" seçimi yalnızca tarayıcıda bir etiket koyar. Masaüstü tarayıcıya ne kadar güveneceğine kendisi karar verir.
-- Motor gerektirdiği için aktarım isteklerinde rastgele 16 haneli bir OmaID de gönderilir; güven sağlamaz.
 - Analitik ve üçüncü taraf isteği yok. `index.html` içinde sıkı bir İçerik Güvenliği Politikası (CSP) var.
 - Service worker (çevrimdışı kabuk) yalnızca güvenli bağlamda (ör. `localhost`) kaydedilir; yerel ağdaki bir `http://` adresinde atlanır.
 

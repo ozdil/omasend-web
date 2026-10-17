@@ -1,5 +1,6 @@
 import {
   ApiError,
+  fetchE2eKey,
   pair,
   pingEngine,
   pollDecision,
@@ -181,7 +182,7 @@ export class OmaSendApp {
     if (this.pendingOffer) blocks.push(this.renderConfirm(this.pendingOffer));
     else if (!this.pairing) blocks.push(this.renderPairing());
     else blocks.push(this.renderSend(), this.renderClipboard());
-    if (!window.isSecureContext) blocks.push(el('p', { class: 'note' }, this.t.insecureNote));
+    if (this.pairing) blocks.push(el('p', { class: 'note' }, this.t.encryptedNote));
     blocks.push(el('p', { class: 'note' }, this.t.receiveNote));
     this.main.replaceChildren(...blocks);
   }
@@ -262,7 +263,7 @@ export class OmaSendApp {
       err.textContent = '';
       try {
         const desk = await pair(this.key, offer, this.profile.name);
-        this.pairing = { pk: desk.pk, name: desk.name, deviceId: desk.deviceId, pairedAt: Date.now(), own: mine.checked };
+        this.pairing = { pk: desk.pk, name: desk.name, deviceId: desk.deviceId, pairedAt: Date.now(), own: mine.checked, x25519: desk.x25519 };
         await savePairing(this.pairing);
         this.pendingOffer = null;
         this.render();
@@ -392,6 +393,22 @@ export class OmaSendApp {
     );
   }
 
+  /**
+   * The desktop's verified encryption key. Pairings made before encryption existed fetch it
+   * once (signed request, answer verified against the pinned key). Without it nothing is sent:
+   * there is no plaintext fallback.
+   */
+  private async encryptionKey(): Promise<string> {
+    const pairing = this.pairing;
+    if (!pairing) throw new Error('e2e_unavailable');
+    if (pairing.x25519) return pairing.x25519;
+    const x = await fetchE2eKey(this.key, pairing.pk);
+    if (!x) throw new Error('e2e_unavailable');
+    this.pairing = { ...pairing, x25519: x };
+    await savePairing(this.pairing);
+    return x;
+  }
+
   private setStatus(status: HTMLElement, text: string, kind: '' | 'ok' | 'error' = ''): void {
     status.textContent = text;
     status.className = kind ? `status ${kind}` : 'status';
@@ -410,18 +427,17 @@ export class OmaSendApp {
     }
     try {
       this.setStatus(status, this.t.requesting(desk));
-      const { status: first, token } = await requestTransfer(this.key, {
-        oma_id: this.profile.omaId,
+      const xpk = await this.encryptionKey();
+      const { status: first, transfer } = await requestTransfer(this.key, xpk, {
         sender_name: this.profile.name,
         files: rows.map((r) => ({ name: r.name, size_bytes: r.file.size })),
         total_size_bytes: rows.reduce((a, r) => a + r.file.size, 0),
-        client: 'web',
       });
       let decision = first;
       if (decision === 'PENDING') this.setStatus(status, this.t.waitingApproval(desk));
       while (decision === 'PENDING') {
         await sleep(POLL_MS, ctl.signal);
-        decision = await pollDecision(this.key, token, ctl.signal);
+        decision = await pollDecision(this.key, transfer.token, ctl.signal);
       }
       if (decision === 'REJECTED') {
         this.setStatus(status, this.t.rejected, 'error');
@@ -433,14 +449,19 @@ export class OmaSendApp {
       }
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
-        this.setStatus(status, this.t.uploading(i + 1, rows.length));
+        this.setStatus(status, this.t.encrypting(i + 1, rows.length));
+        let phase = '';
         await uploadFile(
           this.key,
-          token,
-          row.name,
+          transfer,
+          i,
           row.file,
-          (sent, size) => {
-            row.bar.value = size > 0 ? sent / size : 1;
+          (fraction, p) => {
+            row.bar.value = fraction;
+            if (p !== phase) {
+              phase = p;
+              if (p === 'sending') this.setStatus(status, this.t.uploading(i + 1, rows.length));
+            }
           },
           ctl.signal,
         );
@@ -486,12 +507,10 @@ export class OmaSendApp {
       }
       sendBtn.disabled = true;
       try {
-        await sendClipboard(this.key, {
+        await sendClipboard(this.key, await this.encryptionKey(), {
           text: value,
           content_type: 'text',
           sender_name: this.profile.name,
-          oma_id: this.profile.omaId,
-          client: 'web',
         });
         this.setStatus(status, this.t.clipSent, 'ok');
         text.value = '';
@@ -507,11 +526,16 @@ export class OmaSendApp {
   // ------------------------------------------------------------------ errors
 
   private errorText(e: unknown): string {
+    if (e instanceof Error && e.message === 'e2e_unavailable') return this.t.errNoEncryption;
+    if (e instanceof Error && e.message === 'e2e_bad_key') return this.t.errNoEncryption;
     if (!(e instanceof ApiError)) return this.t.errNetwork;
     const m = e.serverMessage;
     switch (e.status) {
       case 0:
         return this.t.errNetwork;
+      case 400:
+        if (/out of date|encrypted/i.test(m)) return this.t.errPageOutdated;
+        return this.t.errOther(e.status, m);
       case 401:
         return this.t.errSignature(m);
       case 403:
