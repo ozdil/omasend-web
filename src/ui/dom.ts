@@ -22,6 +22,43 @@ export function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
+/**
+ * Keyboard behaviour for a modal already placed in the page: focus moves into it, Tab stays
+ * inside it, Escape closes it, and focus goes back to where it was when it closes.
+ * Returns a function that undoes the listeners and restores focus.
+ */
+export function trapModal(card: HTMLElement, onEscape: () => void, initial?: HTMLElement): () => void {
+  const opener = document.activeElement as HTMLElement | null;
+  const focusable = () =>
+    Array.from(card.querySelectorAll<HTMLElement>('button, input, textarea, select, a[href], [tabindex]:not([tabindex="-1"])')).filter(
+      (n) => !n.hasAttribute('disabled'),
+    );
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      onEscape();
+    } else if (e.key === 'Tab') {
+      const items = focusable();
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  };
+  document.addEventListener('keydown', onKey);
+  (initial ?? focusable()[0])?.focus();
+  return () => {
+    document.removeEventListener('keydown', onKey);
+    opener?.focus();
+  };
+}
+
 /** Static, constant SVG markup only — never pass dynamic values here. */
 export function staticSvg(markup: string): Element {
   const tpl = document.createElement('template');
