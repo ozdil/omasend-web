@@ -22,7 +22,7 @@ import {
   type Pairing,
   type Profile,
 } from '../core/store';
-import { el, GEAR_SVG, LOGO_SVG, staticSvg } from './dom';
+import { el, GEAR_SVG, LOGO_SVG, staticSvg, trapModal } from './dom';
 import { defaultDeviceName, formatBytes, pickLanguage, stringsFor, type Strings } from './i18n';
 import { scanAvailable, scanQr } from './scan';
 
@@ -535,7 +535,11 @@ export class OmaSendApp {
   private showSettings(): void {
     const modal = document.getElementById('modal-container');
     if (!modal) return;
-    const close = () => modal.replaceChildren();
+    let release = () => {};
+    const close = () => {
+      modal.replaceChildren();
+      release();
+    };
 
     const nameInput = el('input', { class: 'input', id: 'device-name', maxlength: '64', value: this.profile.name });
     const nameStatus = el('span', { class: 'muted small', role: 'status' });
@@ -582,30 +586,26 @@ export class OmaSendApp {
     const closeBtn = el('button', { class: 'btn btn-primary', type: 'button' }, this.t.close);
     closeBtn.addEventListener('click', close);
 
-    modal.replaceChildren(
+    const card = el(
+      'div',
+      { class: 'modal-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'settings-title' },
+      el('h2', { class: 'card-title', id: 'settings-title' }, this.t.settings),
       el(
         'div',
-        { class: 'modal-backdrop' },
-        el(
-          'div',
-          { class: 'modal-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'settings-title' },
-          el('h2', { class: 'card-title', id: 'settings-title' }, this.t.settings),
-          el(
-            'div',
-            { class: 'settings-block' },
-            el('label', { class: 'label', for: 'device-name' }, this.t.settingsDeviceName),
-            el('div', { class: 'inline' }, nameInput, saveBtn),
-            nameStatus,
-            el('p', { class: 'muted small' }, this.t.settingsDeviceNameHint),
-          ),
-          el('div', { class: 'settings-block' }, row(this.t.settingsDeviceId, this.key.deviceId)),
-          pairingBlock,
-          el('div', { class: 'settings-block' }, el('p', { class: 'muted small' }, this.t.settingsStorageNote), forgetBrowserBtn),
-          el('div', { class: 'settings-block' }, row(this.t.settingsVersion, __APP_VERSION__)),
-          el('div', { class: 'actions' }, closeBtn),
-        ),
+        { class: 'settings-block' },
+        el('label', { class: 'label', for: 'device-name' }, this.t.settingsDeviceName),
+        el('div', { class: 'inline' }, nameInput, saveBtn),
+        nameStatus,
+        el('p', { class: 'muted small' }, this.t.settingsDeviceNameHint),
       ),
+      el('div', { class: 'settings-block' }, row(this.t.settingsDeviceId, this.key.deviceId)),
+      pairingBlock,
+      el('div', { class: 'settings-block' }, el('p', { class: 'muted small' }, this.t.settingsStorageNote), forgetBrowserBtn),
+      el('div', { class: 'settings-block' }, row(this.t.settingsVersion, __APP_VERSION__)),
+      el('div', { class: 'actions' }, closeBtn),
     );
+    modal.replaceChildren(el('div', { class: 'modal-backdrop' }, card));
+    release = trapModal(card, close, nameInput);
   }
 
   private toast(msg: string): void {

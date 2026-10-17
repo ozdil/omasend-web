@@ -4,7 +4,7 @@
  * usually only in a secure context. The normal way to pair is to scan the desktop's QR code
  * with the phone's camera app, which opens this page with the link in the #pair= fragment.
  */
-import { el } from './dom';
+import { el, trapModal } from './dom';
 import type { Strings } from './i18n';
 
 interface DetectedBarcode {
@@ -43,22 +43,26 @@ export async function scanQr(modal: HTMLElement, t: Strings): Promise<string | n
   video.srcObject = stream;
   return new Promise<string | null>((resolve) => {
     let done = false;
+    let release = () => {};
     const finish = (value: string | null) => {
       if (done) return;
       done = true;
       stream.getTracks().forEach((tr) => tr.stop());
       modal.replaceChildren();
+      release();
       resolve(value);
     };
     const closeBtn = el('button', { class: 'btn', type: 'button' }, t.cancel);
     closeBtn.addEventListener('click', () => finish(null));
-    modal.replaceChildren(
-      el(
-        'div',
-        { class: 'modal-backdrop' },
-        el('div', { class: 'modal-card', role: 'dialog', 'aria-modal': 'true' }, el('p', { class: 'muted' }, t.pairScanHint), video, el('div', { class: 'actions' }, closeBtn)),
-      ),
+    const card = el(
+      'div',
+      { class: 'modal-card', role: 'dialog', 'aria-modal': 'true', 'aria-label': t.pairScan },
+      el('p', { class: 'muted' }, t.pairScanHint),
+      video,
+      el('div', { class: 'actions' }, closeBtn),
     );
+    modal.replaceChildren(el('div', { class: 'modal-backdrop' }, card));
+    release = trapModal(card, () => finish(null), closeBtn);
     const tick = async () => {
       if (done) return;
       try {
