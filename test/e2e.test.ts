@@ -11,6 +11,8 @@ import {
   ciphertextLength,
   encryptFileStream,
   fileLabel,
+  MAX_UPLOAD_WIRE,
+  maxPlaintextLength,
   newMessageKey,
   PAD_TO,
   sealFile,
@@ -96,6 +98,16 @@ describe('file chunking', () => {
       const streamed = await collect(encryptFileStream(mk, 3, new Blob([plain])));
       expect(toHex(streamed)).toBe(toHex(whole));
     }
+  });
+
+  it('knows the largest file that fits under the upload ceiling', () => {
+    for (const wire of [0, 15, 16, 17, CHUNK + 16, CHUNK + 17, MAX_UPLOAD_WIRE]) {
+      const p = maxPlaintextLength(wire);
+      if (wire >= 16) expect(ciphertextLength(p)).toBeLessThanOrEqual(wire);
+      expect(ciphertextLength(p + 1)).toBeGreaterThan(wire);
+    }
+    expect(maxPlaintextLength(CHUNK + 16)).toBe(CHUNK);
+    expect(maxPlaintextLength()).toBeLessThan(MAX_UPLOAD_WIRE);
   });
 
   it('decrypts with the chunk nonce layout the engine uses (counter + final flag)', () => {

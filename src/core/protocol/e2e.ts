@@ -137,6 +137,17 @@ export function ciphertextLength(plainSize: number): number {
   return plainSize + chunkCount(plainSize) * TAG;
 }
 
+/** The engine's upload ceiling (MAX_P2P_UPLOAD_SIZE); it applies to the encrypted body. */
+export const MAX_UPLOAD_WIRE = 10 * 1024 * 1024 * 1024;
+
+/** Largest file that still fits under `wire` bytes once the chunk tags are added. */
+export function maxPlaintextLength(wire: number = MAX_UPLOAD_WIRE): number {
+  let p = Math.floor(wire / (CHUNK + TAG)) * CHUNK;
+  while (ciphertextLength(p + 1) <= wire) p++;
+  while (p > 0 && ciphertextLength(p) > wire) p--;
+  return p;
+}
+
 function chunkNonce(index: number, last: boolean): Uint8Array {
   const n = new Uint8Array(12);
   n[3] = last ? 1 : 0;

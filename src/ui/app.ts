@@ -11,6 +11,7 @@ import {
 import type { DeviceKey } from '../core/protocol/devicekey';
 import { deviceIdForPk, decodePk } from '../core/protocol/devicekey';
 import { sanitizeFilename } from '../core/protocol/filename';
+import { maxPlaintextLength } from '../core/protocol/e2e';
 import { fragmentHasPair, pairLinkFromFragment, pairLinkFromText, parsePairUri, type PairOffer } from '../core/protocol/pairuri';
 import {
   forgetBrowser,
@@ -426,6 +427,8 @@ export class OmaSendApp {
       r.state.textContent = '';
     }
     try {
+      // The desktop's 10 GiB ceiling counts the encrypted body, so check before asking.
+      if (rows.some((r) => r.file.size > maxPlaintextLength())) throw new Error('file_too_large');
       this.setStatus(status, this.t.requesting(desk));
       const xpk = await this.encryptionKey();
       const { status: first, transfer } = await requestTransfer(this.key, xpk, {
@@ -528,6 +531,7 @@ export class OmaSendApp {
   private errorText(e: unknown): string {
     if (e instanceof Error && e.message === 'e2e_unavailable') return this.t.errNoEncryption;
     if (e instanceof Error && e.message === 'e2e_bad_key') return this.t.errNoEncryption;
+    if (e instanceof Error && e.message === 'file_too_large') return this.t.errTooLarge(`max ${formatBytes(maxPlaintextLength())}`);
     if (!(e instanceof ApiError)) return this.t.errNetwork;
     const m = e.serverMessage;
     switch (e.status) {
